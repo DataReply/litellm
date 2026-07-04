@@ -7729,6 +7729,51 @@ class ProxyStartupEvent:
             from litellm.integrations.prometheus import PrometheusLogger
 
             PrometheusLogger.initialize_budget_metrics_cron_job(scheduler=scheduler)
+
+        
+        ########################################################
+        # User credentials Rotation Background Job
+        ########################################################
+
+        from litellm.constants import (
+            LITELLM_USER_CREDENTIALS_ROTATION_ENABLED,
+            LITELLM_USER_CREDENTIALS_ROTATION_CHECK_INTERVAL_SECONDS,
+        )
+
+        user_credentials_enabled: Optional[bool] = str_to_bool(LITELLM_USER_CREDENTIALS_ROTATION_ENABLED)
+        verbose_proxy_logger.debug(f"user_credentials_enabled: {user_credentials_enabled}")
+
+        # TODO: needs to be scheduled also ONLY when it's not behind SSO
+        if user_credentials_enabled is True:
+            try:
+                from litellm.proxy.common_utils.user_credentials_rotation_manager import (
+                    UserCredentialsRotationManager,
+                )
+
+                if prisma_client is not None:
+                    # Reuse the PodLockManager from db_spend_update_writer
+                    pod_lock_manager = proxy_logging_obj.db_spend_update_writer.pod_lock_manager
+                    user_credentials_rotation_manager = UserCredentialsRotationManager(
+                        prisma_client, 
+                        pod_lock_manager=pod_lock_manager,
+                    )
+                    verbose_proxy_logger.debug(
+                        f"User Credentials rotation background job scheduled every {LITELLM_USER_CREDENTIALS_ROTATION_CHECK_INTERVAL_SECONDS} seconds (LITELLM_USER_CREDENTIALS_ROTATION_ENABLED=true)""
+                    )
+                    scheduler.add_job(
+                        user_credentials_rotation_manager.process_rotations,
+                        "interval",
+                        seconds=LITELLM_USER_CREDENTIALS_ROTATION_CHECK_INTERVAL_SECONDS,
+                        id="user_credentials_rotation_job"
+                    )
+                else:
+                    verbose_proxy_logger.warning("User Credentials rotation enabled but prisma_client not available")
+            except Exception as e:
+                verbose_proxy_logger.warning(f"Failed to setup user credentials rotation job: {e}")
+        else:
+            verbose_proxy_logger.debug("User Credentials rotation disabled (set LITELLM_USER_CREDENTIALS_ROTATION_ENABLED=true to enable)")
+
+        
         ########################################################
         # Key Rotation Background Job
         ########################################################

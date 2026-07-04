@@ -1374,6 +1374,19 @@ LITELLM_PROXY_MASTER_KEY_ALIAS = "litellm_proxy_master_key"
 # ``ProxyLogging._handle_logging_proxy_only_error``.
 LITELLM_LOGGING_NO_UPSTREAM_LLM_CALL = "litellm_no_upstream_llm_call"
 
+# User credentials Rotation Constants
+LITELLM_USER_CREDENTIALS_ROTATION_ENABLED = os.getenv("LITELLM_USER_CREDENTIALS_ROTATION_ENABLED", false)
+LITELLM_USER_CREDENTIALS_ROTATION_CHECK_INTERVAL_SECONDS = int(
+    os.getenv("LITELLM_USER_CREDENTIALS_ROTATION_CHECK_INTERVAL_SECONDS", 86400)
+)  # 24 hours default
+LITELLM_USER_CREDENTIALS_ROTATION_GRACE_PERIOD: str = os.getenv(
+    "LITELLM_USER_CREDENTIALS_ROTATION_GRACE_PERIOD", ""
+)  # Duration to keep old key valid after rotation (e.g. "24h", "2d"); empty = immediate revoke (default)
+LITELLM_USER_CREDENTIALS_ROTATION_LOCK_TTL_SECONDS = int(
+    os.getenv("LITELLM_USER_CREDENTIALS_ROTATION_LOCK_TTL_SECONDS", 600)
+)  # 10 minutes default — caps the deadlock window if a pod crashes mid-rotation
+
+
 # Key Rotation Constants
 LITELLM_KEY_ROTATION_ENABLED = os.getenv("LITELLM_KEY_ROTATION_ENABLED", "false")
 LITELLM_KEY_ROTATION_CHECK_INTERVAL_SECONDS = int(
@@ -1423,6 +1436,7 @@ CLOUDZERO_EXPORT_USAGE_DATA_JOB_NAME = "cloudzero_export_usage_data"
 MAVVRIK_FOCUS_EXPORT_JOB_NAME = "mavvrik_focus_export_usage_data"
 CLOUDZERO_MAX_FETCHED_DATA_RECORDS = int(os.getenv("CLOUDZERO_MAX_FETCHED_DATA_RECORDS", 50000))
 SPEND_LOG_CLEANUP_JOB_NAME = "spend_log_cleanup"
+USER_CREDENTIALS_ROTATION_JOB_NAME = "litellm_user_credentials_rotation_job"
 KEY_ROTATION_JOB_NAME = "litellm_key_rotation_job"
 EXPIRED_UI_SESSION_KEY_CLEANUP_JOB_NAME = "litellm_expired_ui_session_key_cleanup_job"
 SPEND_LOG_RUN_LOOPS = int(os.getenv("SPEND_LOG_RUN_LOOPS", 500))

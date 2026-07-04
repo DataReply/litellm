@@ -25,6 +25,7 @@ class LiteLLM_UserTable(LiteLLMPydanticObjectBase):
     organization_id: Optional[str] = None
     object_permission_id: Optional[str] = None
     password: Optional[str] = Field(default=None, exclude=True)
+    password_expiry: Optional[str] = Field(default=None)
     teams: List[str] = []
     user_role: Optional[str] = None
     max_budget: Optional[float] = None
