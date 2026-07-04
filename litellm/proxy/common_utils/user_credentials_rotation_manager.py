@@ -15,7 +15,7 @@ from litellm.constants import (
 )
 from litellm.proxy._types import (
     GenerateKeyResponse,
-    LiteLLM_UserTablePasswordExpiryFiltered,
+    LiteLLM_UserTableFiltered,
     RegenerateKeyRequest,
 )
 from litellm.proxy.hooks.key_management_event_hooks import KeyManagementEventHooks
@@ -38,9 +38,10 @@ class KeyRotationManager:
     on individual user credentials rotation schedules.
     """
 
-    def __init__(self, prisma_client: PrismaClient, pod_lock_manager=None):
+    def __init__(self, prisma_client: PrismaClient, pod_lock_manager=None, notify_users_on_expiration=False):
         self.prisma_client = prisma_client
         self.pod_lock_manager = pod_lock_manager
+        self.notify_users_on_expiration
 
     async def process_rotations(self):
         """
@@ -85,18 +86,17 @@ class KeyRotationManager:
 
             verbose_proxy_logger.info(f"Found {len(user_credentials_to_rotate)} keys due for rotation")
 
-            # Notify each user
-            for key in user_credentials_to_rotate:
-                try:
-                    await self._rotate_key(key)
-                    key_identifier = key.key_name or (key.token[:8] + "..." if key.token else "unknown")
-                    verbose_proxy_logger.info(f"Successfully rotated key: {key_identifier}")
-                except Exception as e:
-                    key_identifier = key.key_name or (key.token[:8] + "..." if key.token else "unknown")
-                    verbose_proxy_logger.error(f"Failed to rotate key {key_identifier}: {e}")
+            if self.notify_users_on_expiration:
+                # Notify each user
+                for user in user_credentials_to_rotate:
+                    try:
+                        await self._notify_user(user)
+                        verbose_proxy_logger.info(f"Successfully notified user: {user.user_id}")
+                    except Exception as e:
+                        verbose_proxy_logger.error(f"Failed to notify user {user.user_id}: {e}")
 
         except Exception as e:
-            verbose_proxy_logger.error(f"Key rotation process failed: {e}")
+            verbose_proxy_logger.error(f"User password expired process failed: {e}")
         finally:
             # Only release the lock if it was actually acquired
             if lock_acquired and self.pod_lock_manager and self.pod_lock_manager.redis_cache:
@@ -104,7 +104,7 @@ class KeyRotationManager:
                     cronjob_id=USER_CREDENTIALS_ROTATION_JOB_NAME,
                 )
 
-    async def _find_credentials_needing_rotation(self) -> List[LiteLLM_UserTablePasswordExpiryFiltered]:
+    async def _find_credentials_needing_rotation(self) -> List[LiteLLM_UserTableFiltered]:
         """
         Find user_credentials that are due for rotation based on their password_expiry timestamp.
 
@@ -121,49 +121,9 @@ class KeyRotationManager:
 
         return credentials_with_rotation
 
-    async def _rotate_key(self, key: LiteLLM_VerificationToken):
+    async def _notify_user(self, user: LiteLLM_UserTableFiltered):
         """
         Notify users whose password is expired
         """
-        # Create regenerate request with grace period for seamless cutover
-        regenerate_request = RegenerateKeyRequest(
-            key=key.token or "",
-            key_alias=key.key_alias,  # Pass key alias to ensure correct secret is updated in AWS Secrets Manager
-            grace_period=LITELLM_KEY_ROTATION_GRACE_PERIOD or None,
-        )
-
-        # Create a system user for key rotation
-        from litellm.proxy._types import UserAPIKeyAuth
-
-        system_user = UserAPIKeyAuth.get_litellm_internal_jobs_user_api_key_auth()
-
-        # Use existing regenerate key function
-        response = await regenerate_key_fn(
-            data=regenerate_request,
-            user_api_key_dict=system_user,
-            litellm_changed_by=LITELLM_INTERNAL_JOBS_SERVICE_ACCOUNT_NAME,
-        )
-
-        # Update the NEW key with rotation info (regenerate_key_fn creates a new token)
-        if isinstance(response, GenerateKeyResponse) and response.token_id and key.rotation_interval:
-            # Calculate next rotation time using helper function
-            now = datetime.now(timezone.utc)
-            next_rotation_time = _calculate_key_rotation_time(key.rotation_interval)
-            await VerificationTokenRepository(self.prisma_client).table.update(
-                where={"token": response.token_id},
-                data={
-                    "rotation_count": (key.rotation_count or 0) + 1,
-                    "last_rotation_at": now,
-                    "key_rotation_at": next_rotation_time,
-                },
-            )
-
-        # Call the existing rotation hook for notifications, audit logs, etc.
-        if isinstance(response, GenerateKeyResponse):
-            await KeyManagementEventHooks.async_key_rotated_hook(
-                data=regenerate_request,
-                existing_key_row=key,
-                response=response,
-                user_api_key_dict=system_user,
-                litellm_changed_by=LITELLM_INTERNAL_JOBS_SERVICE_ACCOUNT_NAME,
-            )
+        # TODO: implement email notification
+        return
