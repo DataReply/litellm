@@ -56,6 +56,12 @@ proxy_config = {
     alerting                          = ["email", "slack_budget_alerts", "slack"]
     alert_types                       = ["budget_alerts", "spend_reports"]
     alerting_threshold                = 300
+    cancel_on_disconnect              = true
+    enable_pre_call_checks            = true
+    disable_spend_logs                = false
+    disable_spend_updates             = false
+    store_prompts_in_spend_logs       = false
+
     alerting_args = {
       daily_report_frequency       = 43200 # 12 hours in seconds
       report_check_interval        = 3600  # 1 hour in seconds
@@ -69,7 +75,8 @@ proxy_config = {
     }
   },
   litellm_settings = {
-    callbacks = ["smtp_email"]
+    callbacks                          = ["smtp_email"]
+    route_all_chat_openai_to_responses = true # Recommended
     mcp_semantic_tool_filter = {
       enabled              = true
       embedding_model      = "text-embedding-3-small"
