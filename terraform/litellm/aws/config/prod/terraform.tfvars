@@ -5,7 +5,7 @@ tenant = "data-reply"
 env    = "prod"
 
 acm_certificate_domain_name = "litellm.datareply.de"
-route53_zone_id             = "Z046271219OMVB01WCCVM"
+route53_zone_id             = "Z0891217221E1PTCMOPWZ"
 
 s3_force_destroy    = false
 skip_final_snapshot = false
@@ -107,12 +107,12 @@ backend_extra_env = {
 }
 
 backend_extra_secrets = {
-  SMTP_USERNAME = "arn:aws:secretsmanager:eu-central-1:751812493785:secret:data-reply/litellm/smtp/username-gg6WZa"
-  SMTP_PASSWORD = "arn:aws:secretsmanager:eu-central-1:751812493785:secret:data-reply/litellm/smtp/password-QplKSB"
+  SMTP_USERNAME = "arn:aws:secretsmanager:eu-central-1:751812493785:secret:data-reply/litellm/smtp-username-GKDe9A"
+  SMTP_PASSWORD = "arn:aws:secretsmanager:eu-central-1:751812493785:secret:data-reply/litellm/smtp-password-AonszW"
 }
 
 gateway_extra_secrets = {
-  SLACK_WEBHOOK_URL = "arn:aws:secretsmanager:eu-central-1:751812493785:secret:data-reply/litellm/slack/webhook/reports-ELuU2k"
-  OPENAI_API_KEY    = "arn:aws:secretsmanager:eu-central-1:751812493785:secret:data-reply/litellm/openai/api-key-tYAO39"
+  SLACK_WEBHOOK_URL = "arn:aws:secretsmanager:eu-central-1:751812493785:secret:data-reply/litellm/slack/webhook-reports-vXNOwY"
+  OPENAI_API_KEY    = "arn:aws:secretsmanager:eu-central-1:751812493785:secret:data-reply/litellm/openai-api-key-nNpCF1"
 }
 
