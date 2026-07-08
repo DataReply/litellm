@@ -160,10 +160,20 @@ jobs:
           UI_CANDIDATE: ${{ steps.ecr.outputs.ui_repo }}:${{ env.IMAGE_TAG }}
           MIGRATIONS_CANDIDATE: ${{ steps.ecr.outputs.migrations_repo }}:${{ env.IMAGE_TAG }}
         run: |
-          gateway_current_image="$(terraform state show aws_ecs_task_definition.gateway | sed -n 's/.*\"image\":\"\([^\"]*\)\".*/\1/p' | head -n 1)"
-          backend_current_image="$(terraform state show aws_ecs_task_definition.backend | sed -n 's/.*\"image\":\"\([^\"]*\)\".*/\1/p' | head -n 1)"
-          ui_current_image="$(terraform state show aws_ecs_task_definition.ui | sed -n 's/.*\"image\":\"\([^\"]*\)\".*/\1/p' | head -n 1)"
-          migrations_current_image="$(terraform state show aws_ecs_task_definition.migrations | sed -n 's/.*\"image\":\"\([^\"]*\)\".*/\1/p' | head -n 1)"
+          state_resources="$(terraform state list 2>/dev/null || true)"
+
+          current_image() {
+            if ! grep -Fqx "$1" <<< "$state_resources"; then
+              return 0
+            fi
+
+            terraform state show "$1" 2>/dev/null | sed -n 's/.*\"image\":\"\([^\"]*\)\".*/\1/p' | head -n 1
+          }
+
+          gateway_current_image="$(current_image aws_ecs_task_definition.gateway)"
+          backend_current_image="$(current_image aws_ecs_task_definition.backend)"
+          ui_current_image="$(current_image aws_ecs_task_definition.ui)"
+          migrations_current_image="$(current_image aws_ecs_task_definition.migrations)"
 
           if [ "$GATEWAY_CHANGED" = "true" ] || [ -z "$gateway_current_image" ]; then
             gateway_build=true
