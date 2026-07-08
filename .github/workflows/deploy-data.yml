@@ -57,26 +57,71 @@ jobs:
           fi
 
           if [ -z "$base_ref" ]; then
-            echo "changed=true" >> "$GITHUB_OUTPUT"
+            {
+              echo "gateway_changed=true"
+              echo "backend_changed=true"
+              echo "ui_changed=true"
+              echo "migrations_changed=true"
+            } >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
           if git diff --quiet "$base_ref"...HEAD -- \
             .dockerignore \
             gateway/ \
-            backend/ \
-            migrations/ \
-            ui/ \
             litellm/ \
             litellm-proxy-extras/ \
             enterprise/ \
             pyproject.toml \
             uv.lock \
             schema.prisma; then
-            echo "changed=false" >> "$GITHUB_OUTPUT"
+            gateway_changed=false
           else
-            echo "changed=true" >> "$GITHUB_OUTPUT"
+            gateway_changed=true
           fi
+
+          if git diff --quiet "$base_ref"...HEAD -- \
+            .dockerignore \
+            backend/ \
+            litellm/ \
+            litellm-proxy-extras/ \
+            enterprise/ \
+            pyproject.toml \
+            uv.lock \
+            schema.prisma; then
+            backend_changed=false
+          else
+            backend_changed=true
+          fi
+
+          if git diff --quiet "$base_ref"...HEAD -- \
+            .dockerignore \
+            ui/; then
+            ui_changed=false
+          else
+            ui_changed=true
+          fi
+
+          if git diff --quiet "$base_ref"...HEAD -- \
+            .dockerignore \
+            migrations/ \
+            litellm/ \
+            litellm-proxy-extras/ \
+            enterprise/ \
+            pyproject.toml \
+            uv.lock \
+            schema.prisma; then
+            migrations_changed=false
+          else
+            migrations_changed=true
+          fi
+
+          {
+            echo "gateway_changed=$gateway_changed"
+            echo "backend_changed=$backend_changed"
+            echo "ui_changed=$ui_changed"
+            echo "migrations_changed=$migrations_changed"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Terraform Init
         run: terraform init -backend-config=config/prod/backend.tfbackend
@@ -106,58 +151,64 @@ jobs:
       - name: Resolve ECS image refs
         id: image_refs
         env:
-          SOURCE_CHANGED: ${{ steps.image_changes.outputs.changed }}
+          GATEWAY_CHANGED: ${{ steps.image_changes.outputs.gateway_changed }}
+          BACKEND_CHANGED: ${{ steps.image_changes.outputs.backend_changed }}
+          UI_CHANGED: ${{ steps.image_changes.outputs.ui_changed }}
+          MIGRATIONS_CHANGED: ${{ steps.image_changes.outputs.migrations_changed }}
           GATEWAY_CANDIDATE: ${{ steps.ecr.outputs.gateway_repo }}:${{ env.IMAGE_TAG }}
           BACKEND_CANDIDATE: ${{ steps.ecr.outputs.backend_repo }}:${{ env.IMAGE_TAG }}
           UI_CANDIDATE: ${{ steps.ecr.outputs.ui_repo }}:${{ env.IMAGE_TAG }}
           MIGRATIONS_CANDIDATE: ${{ steps.ecr.outputs.migrations_repo }}:${{ env.IMAGE_TAG }}
         run: |
-          if [ "$SOURCE_CHANGED" = "true" ]; then
-            {
-              echo "build=true"
-              echo "gateway_image=$GATEWAY_CANDIDATE"
-              echo "backend_image=$BACKEND_CANDIDATE"
-              echo "ui_image=$UI_CANDIDATE"
-              echo "migrations_image=$MIGRATIONS_CANDIDATE"
-            } >> "$GITHUB_OUTPUT"
-            exit 0
+          gateway_current_image="$(terraform state show aws_ecs_task_definition.gateway | sed -n 's/.*\"image\":\"\([^\"]*\)\".*/\1/p' | head -n 1)"
+          backend_current_image="$(terraform state show aws_ecs_task_definition.backend | sed -n 's/.*\"image\":\"\([^\"]*\)\".*/\1/p' | head -n 1)"
+          ui_current_image="$(terraform state show aws_ecs_task_definition.ui | sed -n 's/.*\"image\":\"\([^\"]*\)\".*/\1/p' | head -n 1)"
+          migrations_current_image="$(terraform state show aws_ecs_task_definition.migrations | sed -n 's/.*\"image\":\"\([^\"]*\)\".*/\1/p' | head -n 1)"
+
+          if [ "$GATEWAY_CHANGED" = "true" ] || [ -z "$gateway_current_image" ]; then
+            gateway_build=true
+            gateway_image="$GATEWAY_CANDIDATE"
+          else
+            gateway_build=false
+            gateway_image="$gateway_current_image"
           fi
 
-          state_json="$RUNNER_TEMP/terraform-state.json"
-          terraform show -json > "$state_json"
-
-          image_for() {
-            jq -r --arg name "$1" '
-              def resources(module):
-                (module.resources // [])[],
-                ((module.child_modules // [])[] | resources(.));
-
-              [
-                resources(.values.root_module)
-                | select(.type == "aws_ecs_task_definition" and .name == $name)
-              ][0].values.container_definitions
-              | fromjson
-              | .[0].image // ""
-            ' "$state_json"
-          }
-
-          gateway_image="$(image_for gateway)"
-          backend_image="$(image_for backend)"
-          ui_image="$(image_for ui)"
-          migrations_image="$(image_for migrations)"
-
-          if [ -n "$gateway_image" ] && [ -n "$backend_image" ] && [ -n "$ui_image" ] && [ -n "$migrations_image" ]; then
-            build=false
-          else
-            build=true
-            gateway_image="$GATEWAY_CANDIDATE"
+          if [ "$BACKEND_CHANGED" = "true" ] || [ -z "$backend_current_image" ]; then
+            backend_build=true
             backend_image="$BACKEND_CANDIDATE"
+          else
+            backend_build=false
+            backend_image="$backend_current_image"
+          fi
+
+          if [ "$UI_CHANGED" = "true" ] || [ -z "$ui_current_image" ]; then
+            ui_build=true
             ui_image="$UI_CANDIDATE"
+          else
+            ui_build=false
+            ui_image="$ui_current_image"
+          fi
+
+          if [ "$MIGRATIONS_CHANGED" = "true" ] || [ -z "$migrations_current_image" ]; then
+            migrations_build=true
             migrations_image="$MIGRATIONS_CANDIDATE"
+          else
+            migrations_build=false
+            migrations_image="$migrations_current_image"
+          fi
+
+          if [ "$gateway_build" = "true" ] || [ "$backend_build" = "true" ] || [ "$ui_build" = "true" ] || [ "$migrations_build" = "true" ]; then
+            any_build=true
+          else
+            any_build=false
           fi
 
           {
-            echo "build=$build"
+            echo "any_build=$any_build"
+            echo "gateway_build=$gateway_build"
+            echo "backend_build=$backend_build"
+            echo "ui_build=$ui_build"
+            echo "migrations_build=$migrations_build"
             echo "gateway_image=$gateway_image"
             echo "backend_image=$backend_image"
             echo "ui_image=$ui_image"
@@ -165,15 +216,15 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
-        if: steps.image_refs.outputs.build == 'true'
+        if: steps.image_refs.outputs.any_build == 'true'
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
       - name: Login to Amazon ECR
-        if: steps.image_refs.outputs.build == 'true'
+        if: steps.image_refs.outputs.any_build == 'true'
         uses: aws-actions/amazon-ecr-login@4625ce35226a7557230889aae2f52eb50ec3dcda # v2.0.1
 
       - name: Build and push gateway image
-        if: steps.image_refs.outputs.build == 'true'
+        if: steps.image_refs.outputs.gateway_build == 'true'
         uses: docker/build-push-action@0adf9959216b96bec444f325f1e493d4aa344497 # v6.14.0
         with:
           context: .
@@ -182,7 +233,7 @@ jobs:
           tags: ${{ steps.ecr.outputs.gateway_repo }}:${{ env.IMAGE_TAG }}
 
       - name: Build and push backend image
-        if: steps.image_refs.outputs.build == 'true'
+        if: steps.image_refs.outputs.backend_build == 'true'
         uses: docker/build-push-action@0adf9959216b96bec444f325f1e493d4aa344497 # v6.14.0
         with:
           context: .
@@ -191,7 +242,7 @@ jobs:
           tags: ${{ steps.ecr.outputs.backend_repo }}:${{ env.IMAGE_TAG }}
 
       - name: Build and push UI image
-        if: steps.image_refs.outputs.build == 'true'
+        if: steps.image_refs.outputs.ui_build == 'true'
         uses: docker/build-push-action@0adf9959216b96bec444f325f1e493d4aa344497 # v6.14.0
         with:
           context: .
@@ -200,7 +251,7 @@ jobs:
           tags: ${{ steps.ecr.outputs.ui_repo }}:${{ env.IMAGE_TAG }}
 
       - name: Build and push migrations image
-        if: steps.image_refs.outputs.build == 'true'
+        if: steps.image_refs.outputs.migrations_build == 'true'
         uses: docker/build-push-action@0adf9959216b96bec444f325f1e493d4aa344497 # v6.14.0
         with:
           context: .
