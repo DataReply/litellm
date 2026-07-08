@@ -216,8 +216,13 @@ def test_claim_onboarding_link_happy(client, monkeypatch, mock_prisma):
 
     monkeypatch.setattr(ps, "prisma_client", mock_prisma)
     monkeypatch.setattr(ps, "master_key", "sk-master-test")
-    monkeypatch.setattr(ps, "general_settings", {})
+    monkeypatch.setattr(
+        ps,
+        "general_settings",
+        {"user_credentials_rotation_interval": "30d"},
+    )
     monkeypatch.setattr(ps, "premium_user", False)
+    monkeypatch.setattr(ps, "duration_in_seconds", lambda duration: 30 * 24 * 60 * 60)
 
     # Avoid hitting generate_key_helper_fn (touches DB / many globals); patch
     # the helper directly so we focus on the route's own behavior.
@@ -244,6 +249,10 @@ def test_claim_onboarding_link_happy(client, monkeypatch, mock_prisma):
     assert body["token"] == "session-jwt-token"
     assert body["user_email"] == "alice@example.com"
     assert body["login_url"].endswith("/ui/?login=success")
+    update_call = mock_prisma.db.litellm_usertable.update.await_args
+    assert update_call.kwargs["where"] == {"user_id": "user-abc"}
+    assert "password" in update_call.kwargs["data"]
+    assert update_call.kwargs["data"]["password_expiry"] is not None
 
 
 def test_claim_onboarding_link_invalid_invite_401(client, monkeypatch, mock_prisma):
