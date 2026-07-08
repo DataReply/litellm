@@ -123,10 +123,28 @@ jobs:
             exit 0
           fi
 
-          gateway_image="$(terraform state show aws_ecs_task_definition.gateway | sed -n 's/.*\"image\":\"\\([^\"]*\\)\".*/\\1/p' | head -n 1)"
-          backend_image="$(terraform state show aws_ecs_task_definition.backend | sed -n 's/.*\"image\":\"\\([^\"]*\\)\".*/\\1/p' | head -n 1)"
-          ui_image="$(terraform state show aws_ecs_task_definition.ui | sed -n 's/.*\"image\":\"\\([^\"]*\\)\".*/\\1/p' | head -n 1)"
-          migrations_image="$(terraform state show aws_ecs_task_definition.migrations | sed -n 's/.*\"image\":\"\\([^\"]*\\)\".*/\\1/p' | head -n 1)"
+          state_json="$RUNNER_TEMP/terraform-state.json"
+          terraform show -json > "$state_json"
+
+          image_for() {
+            jq -r --arg name "$1" '
+              def resources(module):
+                (module.resources // [])[],
+                ((module.child_modules // [])[] | resources(.));
+
+              [
+                resources(.values.root_module)
+                | select(.type == "aws_ecs_task_definition" and .name == $name)
+              ][0].values.container_definitions
+              | fromjson
+              | .[0].image // ""
+            ' "$state_json"
+          }
+
+          gateway_image="$(image_for gateway)"
+          backend_image="$(image_for backend)"
+          ui_image="$(image_for ui)"
+          migrations_image="$(image_for migrations)"
 
           if [ -n "$gateway_image" ] && [ -n "$backend_image" ] && [ -n "$ui_image" ] && [ -n "$migrations_image" ]; then
             build=false
