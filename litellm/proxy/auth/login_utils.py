@@ -7,6 +7,7 @@ login endpoints (e.g., /login and /v2/login).
 
 import os
 import secrets
+from datetime import datetime, timezone
 from typing import Literal, Optional, cast
 
 from fastapi import HTTPException
@@ -101,6 +102,26 @@ class LoginResult:
         self.user_email = user_email
         self.user_role = user_role
         self.login_method = login_method
+
+
+def _get_password_expiry(user_row: LiteLLM_UserTable) -> Optional[datetime]:
+    password_expiry = getattr(user_row, "password_expiry", None)
+    if isinstance(password_expiry, datetime):
+        return password_expiry if password_expiry.tzinfo is not None else password_expiry.replace(tzinfo=timezone.utc)
+    return None
+
+
+def _raise_if_password_expired(user_row: LiteLLM_UserTable) -> None:
+    password_expiry = _get_password_expiry(user_row)
+    if password_expiry is None:
+        return
+    if datetime.now(timezone.utc) >= password_expiry:
+        raise ProxyException(
+            message="User credentials have expired. Please rotate your password before logging in again.",
+            type=ProxyErrorTypes.auth_error,
+            param="password_expiry",
+            code=401,
+        )
 
 
 async def authenticate_user(
@@ -264,6 +285,7 @@ async def authenticate_user(
             )
 
         if verify_password(password, _password):
+            _raise_if_password_expired(_user_row)
             await _rehash_password_if_needed(_user_row.user_id, password, _password)
             if os.getenv("DATABASE_URL") is not None:
                 response = await generate_key_helper_fn(

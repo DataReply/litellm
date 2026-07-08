@@ -1516,6 +1516,7 @@ class NewUserRequestTeam(LiteLLMPydanticObjectBase):
 
 class NewUserRequest(GenerateRequestBase):
     max_budget: Optional[float] = None
+    password_expiry: Optional[datetime] = None
     user_email: Optional[str] = None
     user_alias: Optional[str] = None
     user_role: Optional[
@@ -1553,6 +1554,7 @@ class NewUserResponse(GenerateKeyResponse):
 
 class UpdateUserRequestNoUserIDorEmail(GenerateRequestBase):  # shared with BulkUpdateUserRequest
     password: Optional[str] = None
+    password_expiry: Optional[datetime] = None
     spend: Optional[float] = None
     metadata: Optional[dict] = None
     user_alias: Optional[str] = None
@@ -2233,6 +2235,14 @@ class ConfigGeneralSettings(LiteLLMPydanticObjectBase):
         description="sends alerts if requests hang for 5min+",
     )
     ui_access_mode: Optional[Literal["admin_only", "all"]] = Field("all", description="Control access to the Proxy UI")
+    user_credentials_rotation_interval: Optional[str] = Field(
+        None,
+        description="How often non-SSO username/password users must rotate credentials, e.g. '30d'",
+    )
+    user_credentials_rotation_reminder_days: Optional[int] = Field(
+        None,
+        description="How many days before password_expiry to send daily reminder emails for non-SSO users",
+    )
     allowed_routes: Optional[List] = Field(None, description="Proxy API Endpoints you want users to be able to access")
     reject_clientside_metadata_tags: Optional[bool] = Field(
         None,

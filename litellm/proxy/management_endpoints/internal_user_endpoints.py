@@ -15,8 +15,10 @@ These are members of a Team on LiteLLM
 import asyncio
 import json
 import traceback
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Union, cast
+
+from litellm.litellm_core_utils.duration_parser import duration_in_seconds
 
 import fastapi
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
@@ -76,10 +78,35 @@ if TYPE_CHECKING:
 router = APIRouter()
 
 
+def _get_user_credentials_rotation_interval() -> Optional[str]:
+    from litellm.constants import LITELLM_USER_CREDENTIALS_ROTATION_INTERVAL
+    from litellm.proxy.proxy_server import general_settings
+
+    configured_interval = general_settings.get(
+        "user_credentials_rotation_interval",
+        LITELLM_USER_CREDENTIALS_ROTATION_INTERVAL,
+    )
+    if not isinstance(configured_interval, str):
+        return None
+    stripped_interval = configured_interval.strip()
+    return stripped_interval or None
+
+
+def _calculate_password_expiry(rotation_interval: str) -> datetime:
+    return datetime.now(timezone.utc) + timedelta(
+        seconds=duration_in_seconds(rotation_interval)
+    )
+
+
 def _hash_password_in_dict(data: dict) -> None:
     """Hash password field in-place if present."""
-    if "password" in data and data["password"] is not None:
-        data["password"] = hash_password(data["password"])
+    password = data.get("password")
+    if password is None:
+        return
+    data["password"] = hash_password(password)
+    rotation_interval = _get_user_credentials_rotation_interval()
+    if rotation_interval is not None:
+        data["password_expiry"] = _calculate_password_expiry(rotation_interval)
 
 
 def _strip_password_from_response(response) -> None:
