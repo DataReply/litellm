@@ -6,7 +6,7 @@ Canonical definition for ``litellm_usertable``. Re-exported from
 """
 
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import ConfigDict, Field, model_validator
 
@@ -25,6 +25,7 @@ class LiteLLM_UserTable(LiteLLMPydanticObjectBase):
     organization_id: Optional[str] = None
     object_permission_id: Optional[str] = None
     password: Optional[str] = Field(default=None, exclude=True)
+    password_expiry: Optional[datetime] = Field(default=None)
     teams: List[str] = []
     user_role: Optional[str] = None
     max_budget: Optional[float] = None
@@ -50,7 +51,7 @@ class LiteLLM_UserTable(LiteLLMPydanticObjectBase):
 
     @model_validator(mode="before")
     @classmethod
-    def set_model_info(cls, values):
+    def set_model_info(cls, values: Dict[str, Any]) -> Dict[str, Any]:
         if values.get("spend") is None:
             values.update({"spend": 0.0})
         if values.get("models") is None:

@@ -261,6 +261,7 @@ from litellm.proxy.auth.auth_checks import (
     log_db_metrics,
 )
 from litellm.proxy.auth.auth_utils import (
+    _has_user_setup_sso,
     check_response_size_is_safe,
     is_request_body_safe,
     warn_once_if_custom_auth_skips_common_checks,
@@ -7827,6 +7828,56 @@ class ProxyStartupEvent:
             from litellm.integrations.prometheus import PrometheusLogger
 
             PrometheusLogger.initialize_budget_metrics_cron_job(scheduler=scheduler)
+
+        
+        ########################################################
+        # User credentials Rotation Background Job
+        ########################################################
+
+        from litellm.constants import (
+            LITELLM_USER_CREDENTIALS_ROTATION_CHECK_INTERVAL_SECONDS,
+            LITELLM_USER_CREDENTIALS_ROTATION_ENABLED,
+            LITELLM_USER_CREDENTIALS_ROTATION_REMINDER_DAYS,
+        )
+
+        user_credentials_enabled: Optional[bool] = str_to_bool(LITELLM_USER_CREDENTIALS_ROTATION_ENABLED)
+        verbose_proxy_logger.debug(f"user_credentials_enabled: {user_credentials_enabled}")
+
+        if user_credentials_enabled is True and not _has_user_setup_sso():
+            try:
+                from litellm.proxy.common_utils.user_credentials_rotation_manager import (
+                    UserCredentialsRotationManager,
+                )
+
+                if prisma_client is not None:
+                    pod_lock_manager = proxy_logging_obj.db_spend_update_writer.pod_lock_manager
+                    configured_reminder_days = general_settings.get(
+                        "user_credentials_rotation_reminder_days",
+                        LITELLM_USER_CREDENTIALS_ROTATION_REMINDER_DAYS,
+                    )
+                    reminder_days = configured_reminder_days if isinstance(configured_reminder_days, int) else LITELLM_USER_CREDENTIALS_ROTATION_REMINDER_DAYS
+                    user_credentials_rotation_manager = UserCredentialsRotationManager(
+                        prisma_client,
+                        pod_lock_manager=pod_lock_manager,
+                        reminder_days=reminder_days,
+                    )
+                    verbose_proxy_logger.debug(
+                        f"User credentials rotation background job scheduled every {LITELLM_USER_CREDENTIALS_ROTATION_CHECK_INTERVAL_SECONDS} seconds"
+                    )
+                    scheduler.add_job(
+                        user_credentials_rotation_manager.process_rotations,
+                        "interval",
+                        seconds=LITELLM_USER_CREDENTIALS_ROTATION_CHECK_INTERVAL_SECONDS,
+                        id="user_credentials_rotation_job",
+                    )
+                else:
+                    verbose_proxy_logger.warning("User credentials rotation enabled but prisma_client not available")
+            except Exception as e:
+                verbose_proxy_logger.warning(f"Failed to setup user credentials rotation job: {e}")
+        else:
+            verbose_proxy_logger.debug("User credentials rotation disabled or skipped because SSO is enabled")
+
+        
         ########################################################
         # Key Rotation Background Job
         ########################################################
@@ -13573,8 +13624,20 @@ async def claim_onboarding_link(data: InvitationClaim, request: Request):
             )
 
         ### UPDATE USER OBJECT ###
+        from litellm.constants import LITELLM_USER_CREDENTIALS_ROTATION_INTERVAL
+
+        configured_rotation_interval = general_settings.get(
+            "user_credentials_rotation_interval",
+            LITELLM_USER_CREDENTIALS_ROTATION_INTERVAL,
+        )
+        password_expiry = None
+        if isinstance(configured_rotation_interval, str) and configured_rotation_interval.strip():
+            password_expiry = litellm.utils.get_utc_datetime() + timedelta(
+                seconds=duration_in_seconds(configured_rotation_interval.strip())
+            )
+        user_update_data = {"password": hashed_pw, "password_expiry": password_expiry}
         user_obj = await tx.litellm_usertable.update(
-            where={"user_id": invite_obj.user_id}, data={"password": hashed_pw}
+            where={"user_id": invite_obj.user_id}, data=user_update_data
         )
 
         if user_obj is None:

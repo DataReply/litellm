@@ -22554,6 +22554,16 @@ export interface components {
              * @description If True and LiteLLM_SpendLogs has been converted to a range-partitioned table (db_scripts/partition_spend_logs.sql), retention cleanup drops expired partitions instead of deleting rows, and pre-creates upcoming partitions. Default is False.
              */
             use_spend_logs_partitioning?: boolean | null;
+            /**
+             * User Credentials Rotation Interval
+             * @description How often non-SSO username/password users must rotate credentials, e.g. '30d'
+             */
+            user_credentials_rotation_interval?: string | null;
+            /**
+             * User Credentials Rotation Reminder Days
+             * @description How many days before password_expiry to send daily reminder emails for non-SSO users
+             */
+            user_credentials_rotation_reminder_days?: number | null;
             /** User Header Mappings */
             user_header_mappings?: components["schemas"]["UserHeaderMapping"][] | null;
             /**
@@ -25954,6 +25964,8 @@ export interface components {
             organization_id?: string | null;
             /** Organization Memberships */
             organization_memberships?: components["schemas"]["LiteLLM_OrganizationMembershipTable"][] | null;
+            /** Password Expiry */
+            password_expiry?: string | null;
             /**
              * Policies
              * @default []
@@ -26047,6 +26059,8 @@ export interface components {
             organization_id?: string | null;
             /** Organization Memberships */
             organization_memberships?: components["schemas"]["LiteLLM_OrganizationMembershipTable"][] | null;
+            /** Password Expiry */
+            password_expiry?: string | null;
             /**
              * Policies
              * @default []
@@ -27989,6 +28003,8 @@ export interface components {
             object_permission?: components["schemas"]["LiteLLM_ObjectPermissionBase"] | null;
             /** Organizations */
             organizations?: string[] | null;
+            /** Password Expiry */
+            password_expiry?: string | null;
             /**
              * Permissions
              * @default {}
@@ -32176,6 +32192,8 @@ export interface components {
             object_permission?: components["schemas"]["LiteLLM_ObjectPermissionBase"] | null;
             /** Password */
             password?: string | null;
+            /** Password Expiry */
+            password_expiry?: string | null;
             /**
              * Permissions
              * @default {}
@@ -32278,6 +32296,8 @@ export interface components {
             object_permission?: components["schemas"]["LiteLLM_ObjectPermissionBase"] | null;
             /** Password */
             password?: string | null;
+            /** Password Expiry */
+            password_expiry?: string | null;
             /**
              * Permissions
              * @default {}

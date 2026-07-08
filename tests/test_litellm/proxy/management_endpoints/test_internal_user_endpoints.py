@@ -3573,6 +3573,59 @@ async def test_ghsa_wvg4_proxy_admin_can_update_user_budget(mocker):
 
 
 @pytest.mark.asyncio
+async def test_user_update_password_sets_password_expiry_when_rotation_interval_configured(
+    mocker,
+):
+    from litellm.proxy.management_endpoints.internal_user_endpoints import (
+        _update_single_user_helper,
+    )
+
+    existing_user = mocker.MagicMock()
+    existing_user.model_dump.return_value = {
+        "user_id": "target-user",
+        "user_email": "target@example.com",
+        "password": None,
+    }
+    existing_user.user_id = "target-user"
+    existing_user.metadata = {}
+
+    mock_prisma_client = mocker.MagicMock()
+    mock_prisma_client.db.litellm_usertable.find_first = mocker.AsyncMock(
+        return_value=existing_user
+    )
+    mock_prisma_client.update_data = mocker.AsyncMock(
+        return_value={"user_id": "target-user", "password": "hashed-password"}
+    )
+    mock_prisma_client.jsonify_object = mocker.MagicMock(side_effect=lambda x: x)
+
+    mocker.patch("litellm.proxy.proxy_server.prisma_client", mock_prisma_client)
+    mocker.patch("litellm.proxy.proxy_server.litellm_proxy_admin_name", "admin")
+    mocker.patch(
+        "litellm.proxy.proxy_server.general_settings",
+        {"user_credentials_rotation_interval": "30d"},
+    )
+    mocker.patch(
+        "litellm.proxy.management_endpoints.internal_user_endpoints.duration_in_seconds",
+        return_value=30 * 24 * 60 * 60,
+    )
+
+    user_request = UpdateUserRequest(user_id="target-user", password="hunter2")
+    admin_caller = UserAPIKeyAuth(
+        user_id="admin-1", user_role=LitellmUserRoles.PROXY_ADMIN
+    )
+
+    await _update_single_user_helper(
+        user_request=user_request,
+        user_api_key_dict=admin_caller,
+    )
+
+    update_call = mock_prisma_client.update_data.await_args
+    data = update_call.kwargs["data"]
+    assert data["password"] != "hunter2"
+    assert data["password_expiry"] is not None
+
+
+@pytest.mark.asyncio
 async def test_admin_user_update_spend_invalidates_counter(mocker):
     """A direct /user/update spend change must invalidate the cross-pod
     spend counter so enforcement re-reads the new DB value."""

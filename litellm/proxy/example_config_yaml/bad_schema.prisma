@@ -104,6 +104,7 @@ model LiteLLM_UserTable {
     team_id    String?
     organization_id String?
     password  String?
+    password_expiry DateTime?
     teams    String[] @default([])
     user_role  String?
 		max_budget Float?
