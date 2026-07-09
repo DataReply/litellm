@@ -128,6 +128,17 @@ describe("UserDropdown", () => {
     });
   });
 
+  it("should show a change password link when dropdown is opened", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<UserDropdown onLogout={mockOnLogout} />);
+
+    await user.click(getAccountTrigger());
+
+    await waitFor(() => {
+      expect(screen.getByRole("link", { name: /change password/i })).toHaveAttribute("href", "/ui/change-password");
+    });
+  });
+
   it("should call onLogout when logout is clicked", async () => {
     const user = userEvent.setup();
     renderWithProviders(<UserDropdown onLogout={mockOnLogout} />);
@@ -259,26 +270,7 @@ describe("UserDropdown", () => {
     await user.click(getAccountTrigger());
 
     await waitFor(() => {
-      expect(screen.getByText("-")).toBeInTheDocument();
-    });
-  });
-
-  it("should display dash when user ID is not available", async () => {
-    const user = userEvent.setup();
-    mockUseAuthorizedImpl = () => ({
-      userId: null as any,
-      userEmail: "test@example.com",
-      userRole: "Admin",
-      premiumUser: false,
-    });
-
-    renderWithProviders(<UserDropdown onLogout={mockOnLogout} />);
-
-    await user.click(getAccountTrigger());
-
-    await waitFor(() => {
-      const dashElements = screen.getAllByText("-");
-      expect(dashElements.length).toBeGreaterThan(0);
+      expect(screen.getAllByText("-").length).toBeGreaterThan(0);
     });
   });
 

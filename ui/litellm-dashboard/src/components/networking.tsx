@@ -978,9 +978,34 @@ export interface UserInfoV2Response {
   metadata: Record<string, any> | null;
   created_at: string | null;
   updated_at: string | null;
+  password_expiry: string | null;
   sso_user_id: string | null;
   teams: string[];
 }
+
+export interface ChangePasswordResponse {
+  message: string;
+  password_expiry: string | null;
+}
+
+export const changePasswordCall = async (
+  accessToken: string,
+  currentPassword: string,
+  newPassword: string,
+): Promise<ChangePasswordResponse> => {
+  try {
+    return await apiClient.post(`/user/change_password`, {
+      accessToken,
+      body: {
+        current_password: currentPassword,
+        new_password: newPassword,
+      },
+    });
+  } catch (error) {
+    console.error("Failed to change password:", error);
+    throw error;
+  }
+};
 
 /**
  * Lightweight user info fetch from /v2/user/info.
