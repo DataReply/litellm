@@ -178,10 +178,13 @@ jobs:
 
           current_image() {
             terraform show -json 2>/dev/null \
-              | jq -r --arg res "$1" \
-                  '.values.root_module.resources[]
+              | jq -r --arg res "$1" '
+                  .values.root_module.resources[]
                   | select(.address == $res)
-                  | .values.container_definitions[0].image // empty' \
+                  | .values.container_definitions
+                  | fromjson
+                  | .[0].image // empty
+                ' \
               | head -n1
           }
 
