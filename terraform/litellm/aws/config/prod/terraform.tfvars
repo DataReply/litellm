@@ -48,6 +48,21 @@ proxy_config = {
         api_key = "os.environ/OPENAI_API_KEY"
       }
     },
+    {
+      model_name = "smart-router"
+      litellm_params = {
+        model = "auto_router/complexity_router"
+        complexity_router_config = {
+          tiers = {
+            SIMPLE    = "gpt-5.4-mini"
+            MEDIUM    = "gpt-5.4"
+            COMPLEX   = "gpt-5.5"
+            REASONING = "gpt-5.5"
+          }
+        }
+        complexity_router_default_model = "gpt-5.4-mini"
+      }
+    }
   ]
   general_settings = {
     master_key                        = "os.environ/LITELLM_MASTER_KEY"
@@ -75,7 +90,12 @@ proxy_config = {
     }
   },
   litellm_settings = {
-    callbacks                          = ["smtp_email"]
+    callbacks = ["smtp_email", "compression_interception"]
+    compression_interception_params : {
+      enabled             = true
+      compression_trigger = 10000
+      compression_target  = 7000
+    }
     route_all_chat_openai_to_responses = true # Recommended
     mcp_semantic_tool_filter = {
       enabled              = true
@@ -96,6 +116,18 @@ proxy_config = {
       auth_type     = "oauth2"
       client_id     = "os.environ/SHAREPOINT_OAUTH_CREDENTIALS_CLIENT_ID"
       client_secret = "os.environ/SHAREPOINT_OAUTH_CREDENTIALS_CLIENT_SECRET"
+    }
+  },
+  router_settings = {
+    default_litellm_params = {
+      cache_control_injection_points = [
+        {
+          location = message
+          role     = system
+        },
+      ]
+      optional_pre_call_checks = ["prompt_caching"]
+
     }
   }
 }
