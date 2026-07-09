@@ -5,6 +5,12 @@ on:
     branches:
       - datareply/prod
   workflow_dispatch:
+    inputs:
+      force_build:
+        description: 'Force rebuild all images'
+        type: boolean
+        default: false
+
 
 permissions:
   id-token: write
@@ -48,7 +54,15 @@ jobs:
         env:
           BEFORE_SHA: ${{ github.event.before }}
         run: |
-          if [ "${{ github.event_name }}" = "push" ] && [ -n "$BEFORE_SHA" ] && [ "$BEFORE_SHA" != "0000000000000000000000000000000000000000" ]; then
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            if [ "${{ inputs.force_build }}" = "true" ]; then
+              base_ref=""   # force all builds
+            else
+              base_ref="HEAD^"
+            fi
+          elif [ "${{ github.event_name }}" = "push" ] && \
+              [ -n "$BEFORE_SHA" ] && \
+              [ "$BEFORE_SHA" != "0000000000000000000000000000000000000000" ]; then
             base_ref="$BEFORE_SHA"
           elif git rev-parse --verify HEAD^ >/dev/null 2>&1; then
             base_ref="HEAD^"
@@ -163,11 +177,12 @@ jobs:
           state_resources="$(terraform state list 2>/dev/null || true)"
 
           current_image() {
-            if ! grep -Fqx "$1" <<< "$state_resources"; then
-              return 0
-            fi
-
-            terraform state show "$1" 2>/dev/null | sed -n 's/.*\"image\":\"\([^\"]*\)\".*/\1/p' | head -n 1
+            terraform show -json 2>/dev/null \
+              | jq -r --arg res "$1" \
+                  '.values.root_module.resources[]
+                  | select(.address == $res)
+                  | .values.container_definitions[0].image // empty' \
+              | head -n1
           }
 
           gateway_current_image="$(current_image aws_ecs_task_definition.gateway)"
