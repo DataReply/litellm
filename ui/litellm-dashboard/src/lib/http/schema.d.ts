@@ -14388,6 +14388,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/user/change_password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** User Change Password */
+        post: operations["user_change_password_user_change_password_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/user/daily/activity": {
         parameters: {
             query?: never;
@@ -21684,6 +21701,20 @@ export interface components {
              * @constant
              */
             status: "cancelled";
+        };
+        /** ChangePasswordRequest */
+        ChangePasswordRequest: {
+            /** Current Password */
+            current_password: string;
+            /** New Password */
+            new_password: string;
+        };
+        /** ChangePasswordResponse */
+        ChangePasswordResponse: {
+            /** Message */
+            message: string;
+            /** Password Expiry */
+            password_expiry?: string | null;
         };
         /** ChatCompletionAnnotation */
         ChatCompletionAnnotation: {
@@ -32759,6 +32790,8 @@ export interface components {
              * @default []
              */
             models: string[];
+            /** Password Expiry */
+            password_expiry?: string | null;
             /**
              * Spend
              * @default 0
@@ -50982,6 +51015,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BulkUpdateUserResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    user_change_password_user_change_password_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangePasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChangePasswordResponse"];
                 };
             };
             /** @description Validation Error */
