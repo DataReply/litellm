@@ -47,7 +47,11 @@ from litellm.proxy.management_endpoints.key_management_endpoints import (
     prepare_metadata_fields,
 )
 from litellm.proxy.management_helpers.utils import management_endpoint_wrapper
-from litellm.proxy.utils import handle_exception_on_proxy, hash_password
+from litellm.proxy.utils import (
+    handle_exception_on_proxy,
+    hash_password,
+    verify_password,
+)
 from litellm.repositories.organization_repository import OrganizationRepository
 from litellm.repositories.table_repositories import (
     InvitationLinkRepository,
@@ -1044,6 +1048,7 @@ async def user_info_v2(
             metadata=_redact_scim_enterprise_metadata(user_data.get("metadata")),
             created_at=user_data.get("created_at"),
             updated_at=user_data.get("updated_at"),
+            password_expiry=user_data.get("password_expiry"),
             sso_user_id=user_data.get("sso_user_id"),
             teams=user_data.get("teams") or [],
         )
@@ -1288,13 +1293,55 @@ def _check_user_update_authz(
                 },
             )
     elif user_api_key_dict.user_role != LitellmUserRoles.PROXY_ADMIN.value:
-        # Silent-create guard: only PROXY_ADMIN may create via /user/update.
         raise HTTPException(
             status_code=404,
             detail={
                 "error": "User not found. Only PROXY_ADMIN can create users via /user/update; use /user/new instead."
             },
         )
+
+
+def _resolve_password_expiry_for_new_password() -> Optional[datetime]:
+    rotation_interval = _get_user_credentials_rotation_interval()
+    if rotation_interval is None:
+        return None
+    return _calculate_password_expiry(rotation_interval)
+
+
+async def _get_user_row_by_id_or_throw(
+    prisma_client: "PrismaClient",
+    user_id: str,
+) -> BaseModel:
+    user_row = await UserRepository(prisma_client).table.find_first(
+        where={"user_id": user_id}
+    )
+    if user_row is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": f"User not found: {user_id}"},
+        )
+    return user_row
+
+
+async def _change_password_for_user(
+    prisma_client: "PrismaClient",
+    user_id: str,
+    new_password: str,
+) -> ChangePasswordResponse:
+    password_expiry = _resolve_password_expiry_for_new_password()
+    response = await prisma_client.update_data(
+        user_id=user_id,
+        data={
+            "password": hash_password(new_password),
+            "password_expiry": password_expiry,
+        },
+        table_name="user",
+    )
+    _strip_password_from_response(response)
+    return ChangePasswordResponse(
+        message="Password updated successfully",
+        password_expiry=password_expiry,
+    )
 
 
 async def _invalidate_user_spend_counter_if_changed(
@@ -1475,6 +1522,70 @@ def can_user_call_user_update(
     elif user_api_key_dict.user_id == user_info.user_id:
         return True
     return False
+
+
+@router.post(
+    "/user/change_password",
+    tags=["Internal User management"],
+    dependencies=[Depends(user_api_key_auth)],
+    response_model=ChangePasswordResponse,
+)
+@management_endpoint_wrapper
+async def user_change_password(
+    data: ChangePasswordRequest,
+    user_api_key_dict: UserAPIKeyAuth = Depends(user_api_key_auth),
+):
+    try:
+        from litellm.proxy.proxy_server import prisma_client
+
+        caller_user_id = require_caller_user_id_for_non_admin(user_api_key_dict)
+        if prisma_client is None:
+            raise HTTPException(
+                status_code=500,
+                detail=CommonProxyErrors.db_not_connected_error.value,
+            )
+
+        user_row = await _get_user_row_by_id_or_throw(prisma_client, caller_user_id)
+        typed_user = LiteLLM_UserTable(**user_row.model_dump(exclude_none=True))
+        stored_password = typed_user.password
+        if stored_password is None:
+            raise HTTPException(
+                status_code=400,
+                detail={"error": "User does not have a password set."},
+            )
+        if not verify_password(data.current_password, stored_password):
+            raise HTTPException(
+                status_code=401,
+                detail={"error": "Current password is incorrect."},
+            )
+
+        return await _change_password_for_user(
+            prisma_client=prisma_client,
+            user_id=caller_user_id,
+            new_password=data.new_password,
+        )
+    except Exception as e:
+        verbose_proxy_logger.exception(
+            "litellm.proxy.proxy_server.user_change_password(): Exception occured - {}".format(
+                str(e)
+            )
+        )
+        verbose_proxy_logger.debug(traceback.format_exc())
+        if isinstance(e, HTTPException):
+            raise ProxyException(
+                message=getattr(e, "detail", f"Authentication Error({str(e)})"),
+                type=ProxyErrorTypes.auth_error,
+                param=getattr(e, "param", "None"),
+                code=getattr(e, "status_code", status.HTTP_400_BAD_REQUEST),
+            )
+        elif isinstance(e, ProxyException):
+            raise e
+        raise ProxyException(
+            message="Authentication Error, " + str(e),
+            type=ProxyErrorTypes.auth_error,
+            param=getattr(e, "param", "None"),
+            code=status.HTTP_400_BAD_REQUEST,
+        )
 
 
 @router.post(
