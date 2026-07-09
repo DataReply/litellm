@@ -3668,6 +3668,7 @@ async def generate_key_helper_fn(
     router_settings: Optional[dict] = None,
     access_group_ids: Optional[list] = None,
     budget_limits: Optional[list] = None,  # multiple concurrent budget windows
+    password_expiry: Optional[datetime] = None,
 ):
     from litellm.proxy.proxy_server import premium_user, prisma_client
 
@@ -3764,6 +3765,7 @@ async def generate_key_helper_fn(
             "allowed_cache_controls": allowed_cache_controls,
             "sso_user_id": sso_user_id,
             "object_permission_id": object_permission_id,
+            "password_expiry": password_expiry,
         }
         if teams is not None:
             user_data["teams"] = teams

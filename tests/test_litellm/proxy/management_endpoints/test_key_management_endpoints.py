@@ -1,6 +1,7 @@
 import json
 import os
 import sys
+from datetime import datetime, timezone
 
 import litellm
 import pytest
@@ -761,6 +762,48 @@ async def test_generate_key_helper_fn_with_budget_fallbacks(monkeypatch):
     )
 
     assert json.loads(captured_key_data["budget_fallbacks"]) == {"anthropic-haiku-4-5": ["gpt-5.5"]}
+
+
+@pytest.mark.asyncio
+async def test_generate_key_helper_fn_with_password_expiry(monkeypatch):
+    """Regression: /user/new must accept `password_expiry` end-to-end.
+
+    generate_key_helper_fn previously had no `password_expiry` parameter, so
+    passing it via /user/new (which unpacks the full request body as kwargs)
+    raised "unexpected keyword argument" before ever reaching the DB.
+    """
+    mock_prisma_client = AsyncMock()
+    mock_prisma_client.jsonify_object = lambda data: data  # type: ignore
+    mock_prisma_client.db = MagicMock()
+    mock_prisma_client.db.litellm_objectpermissiontable = MagicMock()
+    mock_prisma_client.db.litellm_objectpermissiontable.create = AsyncMock(
+        return_value=MagicMock(object_permission_id=None)
+    )
+
+    captured_user_data = {}
+    password_expiry = datetime(2030, 1, 1, tzinfo=timezone.utc)
+
+    async def _insert_data_side_effect(*args, **kwargs):
+        if kwargs.get("table_name") == "user":
+            captured_user_data.update(kwargs.get("data", {}))
+            return MagicMock(models=[], spend=0)
+        return MagicMock()
+
+    mock_prisma_client.insert_data = AsyncMock(side_effect=_insert_data_side_effect)
+    monkeypatch.setattr("litellm.proxy.proxy_server.prisma_client", mock_prisma_client)
+
+    from litellm.proxy.management_endpoints.key_management_endpoints import (
+        generate_key_helper_fn,
+    )
+
+    await generate_key_helper_fn(
+        request_type="user",
+        table_name="user",
+        user_id="test-user",
+        password_expiry=password_expiry,
+    )
+
+    assert captured_user_data["password_expiry"] == password_expiry
 
 
 @pytest.mark.asyncio
