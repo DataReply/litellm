@@ -118,18 +118,6 @@ proxy_config = {
       client_secret = "os.environ/SHAREPOINT_OAUTH_CREDENTIALS_CLIENT_SECRET"
     }
   },
-  router_settings = {
-    default_litellm_params = {
-      cache_control_injection_points = [
-        {
-          location = message
-          role     = system
-        },
-      ]
-      optional_pre_call_checks = ["prompt_caching"]
-
-    }
-  }
 }
 
 # ---------- Extra env / secrets ----------
