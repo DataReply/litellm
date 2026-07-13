@@ -139,6 +139,25 @@ describe("UserDropdown", () => {
     });
   });
 
+  it("should use a root-relative change password link in development", async () => {
+    vi.resetModules();
+    vi.stubEnv("NODE_ENV", "development");
+    vi.doMock("@/components/networking", () => ({ serverRootPath: "/" }));
+    const { default: DevelopmentUserDropdown } = await import("./UserDropdown");
+    const user = userEvent.setup();
+
+    renderWithProviders(<DevelopmentUserDropdown onLogout={mockOnLogout} />);
+
+    await user.click(getAccountTrigger());
+
+    await waitFor(() => {
+      expect(screen.getByRole("link", { name: /change password/i })).toHaveAttribute("href", "/change-password");
+    });
+
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
   it("should call onLogout when logout is clicked", async () => {
     const user = userEvent.setup();
     renderWithProviders(<UserDropdown onLogout={mockOnLogout} />);

@@ -23,6 +23,7 @@ import {
   removeLocalStorageItem,
   setLocalStorageItem,
 } from "@/utils/localStorageUtils";
+import { migratedHref } from "@/utils/migratedPages";
 
 const { Text } = Typography;
 
@@ -80,7 +81,7 @@ const UserDropdown: React.FC<UserDropdownProps> = ({ onLogout }) => {
     {
       key: "change-password",
       label: (
-        <Link href="/ui/change-password" className="flex items-center gap-2">
+        <Link href={migratedHref("change-password")} className="flex items-center gap-2">
           <LockOutlined />
           <span>Change password</span>
         </Link>
