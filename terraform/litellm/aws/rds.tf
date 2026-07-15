@@ -31,6 +31,13 @@ resource "aws_rds_cluster_parameter_group" "this" {
   tags = local.tags
 }
 
+locals {
+  db_primary_instance_identifier = coalesce(var.db_primary_instance_identifier, "${local.name}-writer")
+  db_reader_instance_identifier  = coalesce(var.db_reader_instance_identifier, "${local.name}-reader")
+  db_writer_instance_class       = coalesce(var.db_writer_instance_class, var.db_instance_class)
+  db_reader_instance_class       = coalesce(var.db_reader_instance_class, var.db_instance_class)
+}
+
 resource "aws_rds_cluster" "this" {
   cluster_identifier              = local.name
   engine                          = "aurora-postgresql"
@@ -47,6 +54,20 @@ resource "aws_rds_cluster" "this" {
   storage_encrypted                   = true
   apply_immediately                   = true
 
+  dynamic "serverlessv2_scaling_configuration" {
+    for_each = var.db_serverless_min_capacity == null ? [] : [
+      {
+        min_capacity = var.db_serverless_min_capacity
+        max_capacity = var.db_serverless_max_capacity
+      }
+    ]
+
+    content {
+      min_capacity = serverlessv2_scaling_configuration.value.min_capacity
+      max_capacity = serverlessv2_scaling_configuration.value.max_capacity
+    }
+  }
+
   # Final-snapshot guard. With the safe default (skip_final_snapshot = false),
   # `terraform destroy` takes a snapshot named `<cluster>-final-<short-sha>`
   # before dropping the cluster. The short SHA disambiguates repeated
@@ -61,9 +82,9 @@ resource "aws_rds_cluster" "this" {
 }
 
 resource "aws_rds_cluster_instance" "writer" {
-  identifier         = "${local.name}-writer"
+  identifier         = local.db_primary_instance_identifier
   cluster_identifier = aws_rds_cluster.this.id
-  instance_class     = var.db_instance_class
+  instance_class     = local.db_writer_instance_class
   engine             = aws_rds_cluster.this.engine
   engine_version     = aws_rds_cluster.this.engine_version
 
@@ -78,9 +99,10 @@ resource "aws_rds_cluster_instance" "writer" {
 }
 
 resource "aws_rds_cluster_instance" "reader" {
-  identifier         = "${local.name}-reader"
+  count              = var.db_enable_reader ? 1 : 0
+  identifier         = local.db_reader_instance_identifier
   cluster_identifier = aws_rds_cluster.this.id
-  instance_class     = var.db_instance_class
+  instance_class     = local.db_reader_instance_class
   engine             = aws_rds_cluster.this.engine
   engine_version     = aws_rds_cluster.this.engine_version
 

@@ -79,6 +79,48 @@ variable "skip_final_snapshot" {
   default     = false
 }
 
+variable "db_enable_reader" {
+  description = "Create a reader instance alongside the primary instance."
+  type        = bool
+  default     = true
+}
+
+variable "db_primary_instance_identifier" {
+  description = "DB instance identifier for the primary instance. Leave unset to use the module default."
+  type        = string
+  default     = null
+}
+
+variable "db_reader_instance_identifier" {
+  description = "DB instance identifier for the reader instance. Leave unset to use the module default."
+  type        = string
+  default     = null
+}
+
+variable "db_writer_instance_class" {
+  description = "Aurora instance class for the primary instance. Leave unset to use the module default."
+  type        = string
+  default     = null
+}
+
+variable "db_reader_instance_class" {
+  description = "Aurora instance class for the reader instance. Leave unset to use the module default."
+  type        = string
+  default     = null
+}
+
+variable "db_serverless_min_capacity" {
+  description = "Aurora Serverless v2 minimum ACUs. Empty means leave unmanaged by this wrapper."
+  type        = number
+  default     = null
+}
+
+variable "db_serverless_max_capacity" {
+  description = "Aurora Serverless v2 maximum ACUs. Empty means leave unmanaged by this wrapper."
+  type        = number
+  default     = null
+}
+
 variable "proxy_config" {
   description = "LiteLLM proxy config (contents of config.yaml). Empty → defaults."
   type        = any

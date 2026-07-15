@@ -19,7 +19,7 @@ output "aurora_writer_endpoint" {
 }
 
 output "aurora_reader_endpoint" {
-  description = "Aurora reader endpoint."
+  description = "Aurora reader endpoint when the module is configured with a reader."
   value       = module.litellm.aurora_reader_endpoint
 }
 

@@ -280,9 +280,59 @@ variable "ui_cpu_target" {
 # ---------- RDS ----------
 
 variable "db_instance_class" {
-  description = "Aurora instance class for both writer and reader."
+  description = "Default Aurora instance class for both writer and reader when the per-instance overrides are unset."
   type        = string
   default     = "db.r6g.large"
+}
+
+variable "db_writer_instance_class" {
+  description = "Aurora instance class for the primary instance. Leave unset to inherit db_instance_class."
+  type        = string
+  default     = null
+}
+
+variable "db_reader_instance_class" {
+  description = "Aurora instance class for the reader instance. Leave unset to inherit db_instance_class."
+  type        = string
+  default     = null
+}
+
+variable "db_primary_instance_identifier" {
+  description = "DB instance identifier for the primary instance. Leave unset to use <tenant>-litellm-<env>-writer."
+  type        = string
+  default     = null
+}
+
+variable "db_reader_instance_identifier" {
+  description = "DB instance identifier for the reader instance. Leave unset to use <tenant>-litellm-<env>-reader."
+  type        = string
+  default     = null
+}
+
+variable "db_enable_reader" {
+  description = "Create a reader instance alongside the primary instance."
+  type        = bool
+  default     = true
+}
+
+variable "db_serverless_min_capacity" {
+  description = "Aurora Serverless v2 minimum ACUs for the cluster. Leave unset unless you want this module to manage the Serverless v2 scaling range."
+  type        = number
+  default     = null
+}
+
+variable "db_serverless_max_capacity" {
+  description = "Aurora Serverless v2 maximum ACUs for the cluster. Leave unset unless you want this module to manage the Serverless v2 scaling range."
+  type        = number
+  default     = null
+
+  validation {
+    condition = (
+      (var.db_serverless_min_capacity == null) == (var.db_serverless_max_capacity == null)
+      && (var.db_serverless_min_capacity == null || var.db_serverless_min_capacity <= var.db_serverless_max_capacity)
+    )
+    error_message = "db_serverless_min_capacity and db_serverless_max_capacity must either both be unset or both be set, and min must be <= max."
+  }
 }
 
 variable "db_engine_version" {
