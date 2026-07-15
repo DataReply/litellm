@@ -3,7 +3,7 @@
 Deploys the componentized LiteLLM proxy on AWS:
 
 - **VPC** with public + private subnets across the AZs you pass in, one NAT gateway
-- **Aurora Postgres** cluster — one writer instance + one reader instance, **IAM database authentication enabled**
+- **Aurora Postgres** cluster with **IAM database authentication enabled**; by default it creates one writer instance + one reader instance, but it can also run as a single-instance Aurora Serverless v2 deployment
 - **ElastiCache Redis** (private, replication group with multi-AZ failover and at-rest + in-transit encryption) for caching + rate limiting
 - **S3 bucket** (private, versioned, SSE-S3) — exposed to gateway + backend as `S3_BUCKET_NAME` / `S3_REGION_NAME` for cache backend, request log archival, and `/v1/files` storage
 - **Secrets Manager** entries for `LITELLM_MASTER_KEY` (auto-generated, `sk-…`) and the Aurora master password (bootstrap-only)
@@ -30,6 +30,24 @@ The same apply also runs the prisma schema migration via the existing
 At runtime, the proxy assembles `DATABASE_URL` from `DATABASE_HOST/PORT/USER/NAME`
 plus a short-lived IAM token — see `litellm/proxy/auth/rds_iam_token.py`. The
 task role has `rds-db:connect` scoped to the IAM-authed user on the cluster.
+When the module is configured with a reader, gateway and backend also receive
+`DATABASE_HOST_READ_REPLICA` / `DATABASE_PORT_READ_REPLICA`; when the module is
+configured without a reader, those env vars are omitted and LiteLLM stays on
+the writer endpoint only.
+
+To switch the cluster to Aurora Serverless v2, keep `engine_mode = "provisioned"`
+and set `db_serverless_min_capacity` plus `db_serverless_max_capacity`. Then use
+`db_writer_instance_class = "db.serverless"` and, if you still want a reader,
+`db_reader_instance_class = "db.serverless"`. Set `db_enable_reader = false` for
+a single-instance topology.
+
+If you are migrating an existing provisioned cluster in place, do not flip the
+prod Terraform straight to `db_enable_reader = false` before the live cutover.
+The lower-disruption migration path promotes the existing reader instance to be
+writer first, so the surviving DB instance can still keep the old `...-reader`
+identifier. Reconcile that after the cutover with the final Terraform config,
+and expect a one-time Terraform state move if the promoted `...-reader` becomes
+the long-term primary instance.
 
 **Break-glass.** If you need to run the bootstrap or migration by hand (e.g.,
 to re-apply against an externally provisioned cluster), `db_bootstrap_sql` and
@@ -340,7 +358,7 @@ losing the contents.
 | `locals.tf`       | Path-prefix lists for ALB routing (mirror of `helm/.../ingress.yaml`) |
 | `network.tf`      | VPC, subnets, IGW, NAT, route tables, security groups                 |
 | `secrets.tf`      | Secrets Manager entries + random passwords                            |
-| `rds.tf`          | Aurora Postgres cluster + writer / reader instances                   |
+| `rds.tf`          | Aurora Postgres cluster plus configurable primary / optional reader instances |
 | `redis.tf`        | ElastiCache Redis                                                     |
 | `s3.tf`           | S3 bucket + task-role policy scoped to it                             |
 | `iam.tf`          | Task execution + task roles, including `rds-db:connect`               |

@@ -10,6 +10,10 @@ route53_zone_id             = "Z0891217221E1PTCMOPWZ"
 s3_force_destroy    = false
 skip_final_snapshot = false
 
+db_enable_reader               = true
+db_primary_instance_identifier = "data-reply-litellm-prod-writer"
+db_reader_instance_identifier  = "data-reply-litellm-prod-reader"
+
 # ---------- proxy_config (mirrors helm gateway.config.proxy_config) ----------
 proxy_config = {
   model_list = [

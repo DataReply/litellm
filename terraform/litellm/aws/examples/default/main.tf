@@ -39,4 +39,12 @@ module "litellm" {
   backend_extra_env     = var.backend_extra_env
   gateway_extra_secrets = var.gateway_extra_secrets
   backend_extra_secrets = var.backend_extra_secrets
+
+  db_enable_reader               = var.db_enable_reader
+  db_primary_instance_identifier = var.db_primary_instance_identifier
+  db_reader_instance_identifier  = var.db_reader_instance_identifier
+  db_writer_instance_class       = var.db_writer_instance_class
+  db_reader_instance_class       = var.db_reader_instance_class
+  db_serverless_min_capacity     = var.db_serverless_min_capacity
+  db_serverless_max_capacity     = var.db_serverless_max_capacity
 }

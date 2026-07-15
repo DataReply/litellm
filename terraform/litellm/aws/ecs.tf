@@ -76,29 +76,35 @@ locals {
     { name = "OTEL_HEADERS", valueFrom = var.otel_headers_secret_arn },
   ] : []
 
-  shared_env = [
-    { name = "IAM_TOKEN_DB_AUTH", value = "true" },
-    { name = "DATABASE_HOST", value = aws_rds_cluster.this.endpoint },
-    { name = "DATABASE_PORT", value = tostring(aws_rds_cluster.this.port) },
-    { name = "DATABASE_USER", value = var.db_username },
-    { name = "DATABASE_NAME", value = var.db_name },
-    { name = "DATABASE_HOST_READ_REPLICA", value = aws_rds_cluster.this.reader_endpoint },
-    { name = "DATABASE_PORT_READ_REPLICA", value = tostring(aws_rds_cluster.this.port) },
-    { name = "REDIS_HOST", value = aws_elasticache_replication_group.this.primary_endpoint_address },
-    { name = "REDIS_PORT", value = tostring(aws_elasticache_replication_group.this.port) },
-    # transit_encryption_enabled = true on the replication group means the
-    # proxy must connect via rediss://. _redis.get_redis_url_from_environment
-    # honors REDIS_SSL to flip the scheme.
-    { name = "REDIS_SSL", value = "true" },
-    # S3 bucket — referenced from proxy_config via os.environ/S3_BUCKET_NAME
-    # (e.g. cache backend, request log archival, /files passthrough).
-    { name = "S3_BUCKET_NAME", value = aws_s3_bucket.this.bucket },
-    { name = "S3_REGION_NAME", value = var.region },
-    # boto3 inside generate_iam_auth_token reads AWS_REGION_NAME first, then
-    # AWS_REGION. Set both for compatibility.
-    { name = "AWS_REGION", value = var.region },
-    { name = "AWS_REGION_NAME", value = var.region },
-  ]
+  shared_env = concat(
+    [
+      { name = "IAM_TOKEN_DB_AUTH", value = "true" },
+      { name = "DATABASE_HOST", value = aws_rds_cluster.this.endpoint },
+      { name = "DATABASE_PORT", value = tostring(aws_rds_cluster.this.port) },
+      { name = "DATABASE_USER", value = var.db_username },
+      { name = "DATABASE_NAME", value = var.db_name },
+    ],
+    var.db_enable_reader ? [
+      { name = "DATABASE_HOST_READ_REPLICA", value = aws_rds_cluster.this.reader_endpoint },
+      { name = "DATABASE_PORT_READ_REPLICA", value = tostring(aws_rds_cluster.this.port) },
+    ] : [],
+    [
+      { name = "REDIS_HOST", value = aws_elasticache_replication_group.this.primary_endpoint_address },
+      { name = "REDIS_PORT", value = tostring(aws_elasticache_replication_group.this.port) },
+      # transit_encryption_enabled = true on the replication group means the
+      # proxy must connect via rediss://. _redis.get_redis_url_from_environment
+      # honors REDIS_SSL to flip the scheme.
+      { name = "REDIS_SSL", value = "true" },
+      # S3 bucket — referenced from proxy_config via os.environ/S3_BUCKET_NAME
+      # (e.g. cache backend, request log archival, /files passthrough).
+      { name = "S3_BUCKET_NAME", value = aws_s3_bucket.this.bucket },
+      { name = "S3_REGION_NAME", value = var.region },
+      # boto3 inside generate_iam_auth_token reads AWS_REGION_NAME first, then
+      # AWS_REGION. Set both for compatibility.
+      { name = "AWS_REGION", value = var.region },
+      { name = "AWS_REGION_NAME", value = var.region },
+    ],
+  )
 
   shared_secrets = concat(
     [
