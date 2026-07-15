@@ -7,12 +7,13 @@ env    = "prod"
 acm_certificate_domain_name = "litellm.datareply.de"
 route53_zone_id             = "Z0891217221E1PTCMOPWZ"
 
-s3_force_destroy    = false
-skip_final_snapshot = false
-
-db_enable_reader               = true
-db_primary_instance_identifier = "data-reply-litellm-prod-writer"
-db_reader_instance_identifier  = "data-reply-litellm-prod-reader"
+s3_force_destroy               = false
+skip_final_snapshot            = false
+db_enable_reader               = false
+db_primary_instance_identifier = "data-reply-litellm-prod-reader"
+db_writer_instance_class       = "db.serverless"
+db_serverless_min_capacity     = 0.5
+db_serverless_max_capacity     = 8
 
 # ---------- proxy_config (mirrors helm gateway.config.proxy_config) ----------
 proxy_config = {
