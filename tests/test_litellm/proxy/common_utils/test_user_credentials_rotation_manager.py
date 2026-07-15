@@ -47,6 +47,7 @@ async def test_notify_user_sends_email_for_expiring_password():
     assert call["receiver_email"] == "user@example.com"
     assert call["subject"] == "LiteLLM password rotation reminder"
     assert "2030-01-01" in call["html"]
+    assert "/ui/change-password" in call["html"]
 
 
 @pytest.mark.asyncio

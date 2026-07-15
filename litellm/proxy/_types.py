@@ -1583,6 +1583,16 @@ class UpdateUserRequest(UpdateUserRequestNoUserIDorEmail):
         return values
 
 
+class ChangePasswordRequest(LiteLLMPydanticObjectBase):
+    current_password: str
+    new_password: str
+
+
+class ChangePasswordResponse(LiteLLMPydanticObjectBase):
+    message: str
+    password_expiry: Optional[datetime] = None
+
+
 class DeleteUserRequest(LiteLLMPydanticObjectBase):
     user_ids: List[str]  # required
 
@@ -2591,6 +2601,7 @@ class UserInfoV2Response(LiteLLMPydanticObjectBase):
     metadata: Optional[dict] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+    password_expiry: Optional[datetime] = None
     sso_user_id: Optional[str] = None
     teams: List[str] = []  # Just team IDs, not full team objects
 

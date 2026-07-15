@@ -3,16 +3,11 @@ import { useDisableBlogPosts } from "@/app/(dashboard)/hooks/useDisableBlogPosts
 import { useDisableBouncingIcon } from "@/app/(dashboard)/hooks/useDisableBouncingIcon";
 import { useDisableShowPrompts } from "@/app/(dashboard)/hooks/useDisableShowPrompts";
 import { useDisableUsageIndicator } from "@/app/(dashboard)/hooks/useDisableUsageIndicator";
-import {
-  emitLocalStorageChange,
-  getLocalStorageItem,
-  removeLocalStorageItem,
-  setLocalStorageItem,
-} from "@/utils/localStorageUtils";
 import { navAccountDisplayName } from "@/components/Navbar/navDisplayName";
 import {
   CrownOutlined,
   DownOutlined,
+  LockOutlined,
   LogoutOutlined,
   MailOutlined,
   SafetyOutlined,
@@ -20,7 +15,15 @@ import {
 } from "@ant-design/icons";
 import type { MenuProps } from "antd";
 import { Button, Divider, Dropdown, Space, Switch, Tag, Tooltip, Typography } from "antd";
+import Link from "next/link";
 import React, { useEffect, useState } from "react";
+import {
+  emitLocalStorageChange,
+  getLocalStorageItem,
+  removeLocalStorageItem,
+  setLocalStorageItem,
+} from "@/utils/localStorageUtils";
+import { migratedHref } from "@/utils/migratedPages";
 
 const { Text } = Typography;
 
@@ -75,6 +78,15 @@ const UserDropdown: React.FC<UserDropdownProps> = ({ onLogout }) => {
   }, []);
 
   const userItems: MenuProps["items"] = [
+    {
+      key: "change-password",
+      label: (
+        <Link href={migratedHref("change-password")} className="flex items-center gap-2">
+          <LockOutlined />
+          <span>Change password</span>
+        </Link>
+      ),
+    },
     {
       key: "logout",
       label: (

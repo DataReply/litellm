@@ -6,12 +6,10 @@ import { useCurrentUser } from "./useCurrentUser";
 import { userGetInfoV2 } from "@/components/networking";
 import type { UserInfoV2Response } from "@/components/networking";
 
-// Mock the networking function
 vi.mock("@/components/networking", () => ({
   userGetInfoV2: vi.fn(),
 }));
 
-// Mock the queryKeysFactory - we'll mock the specific return value
 vi.mock("../common/queryKeysFactory", () => ({
   createQueryKeys: vi.fn((resource: string) => ({
     all: [resource],
@@ -22,13 +20,11 @@ vi.mock("../common/queryKeysFactory", () => ({
   })),
 }));
 
-// Mock useAuthorized hook - we can override this in individual tests
 const mockUseAuthorized = vi.fn();
 vi.mock("@/app/(dashboard)/hooks/useAuthorized", () => ({
   default: () => mockUseAuthorized(),
 }));
 
-// Mock data - response from userGetInfoV2 is the user object directly
 const mockUserInfoV2Response: UserInfoV2Response = {
   user_id: "test-user-id",
   user_email: "test@example.com",
@@ -42,6 +38,7 @@ const mockUserInfoV2Response: UserInfoV2Response = {
   metadata: null,
   created_at: "2024-01-01T00:00:00Z",
   updated_at: "2024-01-01T00:00:00Z",
+  password_expiry: "2030-01-01T00:00:00Z",
   sso_user_id: null,
   teams: ["team-1"],
 };
@@ -58,10 +55,8 @@ describe("useCurrentUser", () => {
       },
     });
 
-    // Reset all mocks
     vi.clearAllMocks();
 
-    // Set default mock for useAuthorized (enabled state)
     mockUseAuthorized.mockReturnValue({
       accessToken: "test-access-token",
       userId: "test-user-id",
@@ -78,16 +73,13 @@ describe("useCurrentUser", () => {
     React.createElement(QueryClientProvider, { client: queryClient }, children);
 
   it("should return user info data when query is successful", async () => {
-    // Mock successful API call - v2 returns user object directly
     (userGetInfoV2 as any).mockResolvedValue(mockUserInfoV2Response);
 
     const { result } = renderHook(() => useCurrentUser(), { wrapper });
 
-    // Initially loading
     expect(result.current.isLoading).toBe(true);
     expect(result.current.data).toBeUndefined();
 
-    // Wait for success
     await waitFor(() => {
       expect(result.current.isLoading).toBe(false);
       expect(result.current.isSuccess).toBe(true);
@@ -95,24 +87,18 @@ describe("useCurrentUser", () => {
 
     expect(result.current.data).toEqual(mockUserInfoV2Response);
     expect(result.current.error).toBeNull();
-    // v2 call only needs accessToken (no userId for self-lookup)
     expect(userGetInfoV2).toHaveBeenCalledWith("test-access-token");
     expect(userGetInfoV2).toHaveBeenCalledTimes(1);
   });
 
   it("should handle error when userGetInfoV2 fails", async () => {
-    const errorMessage = "Failed to fetch user info";
-    const testError = new Error(errorMessage);
-
-    // Mock failed API call
+    const testError = new Error("Failed to fetch user info");
     (userGetInfoV2 as any).mockRejectedValue(testError);
 
     const { result } = renderHook(() => useCurrentUser(), { wrapper });
 
-    // Initially loading
     expect(result.current.isLoading).toBe(true);
 
-    // Wait for error
     await waitFor(() => {
       expect(result.current.isLoading).toBe(false);
       expect(result.current.isError).toBe(true);
@@ -125,7 +111,6 @@ describe("useCurrentUser", () => {
   });
 
   it("should not execute query when accessToken is missing", async () => {
-    // Mock missing accessToken
     mockUseAuthorized.mockReturnValue({
       accessToken: null,
       userId: "test-user-id",
@@ -139,17 +124,13 @@ describe("useCurrentUser", () => {
 
     const { result } = renderHook(() => useCurrentUser(), { wrapper });
 
-    // Query should not execute
     expect(result.current.isLoading).toBe(false);
     expect(result.current.data).toBeUndefined();
     expect(result.current.isFetched).toBe(false);
-
-    // API should not be called
     expect(userGetInfoV2).not.toHaveBeenCalled();
   });
 
   it("should not execute query when userId is missing", async () => {
-    // Mock missing userId
     mockUseAuthorized.mockReturnValue({
       accessToken: "test-access-token",
       userId: null,
@@ -163,69 +144,21 @@ describe("useCurrentUser", () => {
 
     const { result } = renderHook(() => useCurrentUser(), { wrapper });
 
-    // Query should not execute
     expect(result.current.isLoading).toBe(false);
     expect(result.current.data).toBeUndefined();
     expect(result.current.isFetched).toBe(false);
-
-    // API should not be called
     expect(userGetInfoV2).not.toHaveBeenCalled();
   });
 
-  it("should not execute query when all auth values are missing", async () => {
-    // Mock all auth values missing
-    mockUseAuthorized.mockReturnValue({
-      accessToken: null,
-      userId: null,
-      userRole: null,
-      token: null,
-      userEmail: "test@example.com",
-      premiumUser: false,
-      disabledPersonalKeyCreation: null,
-      showSSOBanner: false,
-    });
-
-    const { result } = renderHook(() => useCurrentUser(), { wrapper });
-
-    // Query should not execute
-    expect(result.current.isLoading).toBe(false);
-    expect(result.current.data).toBeUndefined();
-    expect(result.current.isFetched).toBe(false);
-
-    // API should not be called
-    expect(userGetInfoV2).not.toHaveBeenCalled();
-  });
-
-  it("should execute query when all auth values are present", async () => {
-    // Mock successful API call
+  it("should expose password_expiry when present", async () => {
     (userGetInfoV2 as any).mockResolvedValue(mockUserInfoV2Response);
 
-    // Ensure all auth values are present (already set in beforeEach)
     const { result } = renderHook(() => useCurrentUser(), { wrapper });
 
-    // Wait for query to execute
     await waitFor(() => {
-      expect(result.current.isLoading).toBe(false);
+      expect(result.current.isSuccess).toBe(true);
     });
 
-    expect(userGetInfoV2).toHaveBeenCalledWith("test-access-token");
-    expect(userGetInfoV2).toHaveBeenCalledTimes(1);
-  });
-
-  it("should handle network timeout error", async () => {
-    const timeoutError = new Error("Network timeout");
-
-    // Mock network timeout
-    (userGetInfoV2 as any).mockRejectedValue(timeoutError);
-
-    const { result } = renderHook(() => useCurrentUser(), { wrapper });
-
-    // Wait for error
-    await waitFor(() => {
-      expect(result.current.isError).toBe(true);
-    });
-
-    expect(result.current.error).toEqual(timeoutError);
-    expect(result.current.data).toBeUndefined();
+    expect(result.current.data?.password_expiry).toBe("2030-01-01T00:00:00Z");
   });
 });

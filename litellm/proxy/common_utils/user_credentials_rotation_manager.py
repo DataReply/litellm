@@ -4,7 +4,7 @@ from typing import Any
 from litellm._logging import verbose_proxy_logger
 from litellm.constants import LITELLM_USER_CREDENTIALS_ROTATION_LOCK_TTL_SECONDS
 from litellm.models.user import LiteLLM_UserTable
-from litellm.proxy.utils import PrismaClient, send_email
+from litellm.proxy.utils import PrismaClient, get_custom_url, send_email
 from litellm.repositories.user_repository import UserRepository
 
 
@@ -98,11 +98,13 @@ class UserCredentialsRotationManager:
         if not isinstance(user_email, str) or not user_email.strip() or password_expiry is None:
             return
 
+        change_password_url = get_custom_url("", "ui/change-password")
         subject = "LiteLLM password rotation reminder"
         html = (
             "<p>Your LiteLLM password will expire soon.</p>"
             f"<p>Password expiry: <b>{password_expiry}</b></p>"
-            "<p>Please rotate your password before the expiry date to keep access.</p>"
+            "<p>Please change your password before the expiry date to keep access.</p>"
+            f'<p><a href="{change_password_url}">Change password in the Console</a></p>'
         )
         await send_email(
             receiver_email=user_email,

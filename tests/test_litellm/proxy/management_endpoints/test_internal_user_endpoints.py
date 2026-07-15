@@ -13,6 +13,7 @@ sys.path.insert(
 )  # Adds the parent directory to the system path
 
 from litellm.proxy._types import (
+    ChangePasswordRequest,
     LiteLLM_UserTableFiltered,
     LitellmUserRoles,
     NewUserRequest,
@@ -28,6 +29,8 @@ from litellm.proxy.management_endpoints.internal_user_endpoints import (
     get_users,
     new_user,
     ui_view_users,
+    user_change_password,
+    user_info_v2,
 )
 from litellm.proxy.proxy_server import app
 
@@ -1036,9 +1039,7 @@ async def test_new_user_non_admin_permissions_non_empty_rejected(mocker):
         user_role=LitellmUserRoles.INTERNAL_USER,
         permissions={"get_spend_routes": True},
     )
-    caller = UserAPIKeyAuth(
-        user_id="org-admin", user_role=LitellmUserRoles.ORG_ADMIN
-    )
+    caller = UserAPIKeyAuth(user_id="org-admin", user_role=LitellmUserRoles.ORG_ADMIN)
 
     with pytest.raises(ProxyException) as exc_info:
         await new_user(data=data, user_api_key_dict=caller)
@@ -1082,9 +1083,7 @@ async def test_new_user_non_admin_permissions_explicit_empty_rejected(mocker):
         permissions={},
     )
     assert "permissions" in data.model_fields_set
-    caller = UserAPIKeyAuth(
-        user_id="org-admin", user_role=LitellmUserRoles.ORG_ADMIN
-    )
+    caller = UserAPIKeyAuth(user_id="org-admin", user_role=LitellmUserRoles.ORG_ADMIN)
 
     with pytest.raises(ProxyException) as exc_info:
         await new_user(data=data, user_api_key_dict=caller)
@@ -1137,9 +1136,7 @@ async def test_new_user_non_admin_omits_permissions_succeeds(mocker):
         user_role=LitellmUserRoles.INTERNAL_USER,
     )
     assert "permissions" not in data.model_fields_set
-    caller = UserAPIKeyAuth(
-        user_id="org-admin", user_role=LitellmUserRoles.ORG_ADMIN
-    )
+    caller = UserAPIKeyAuth(user_id="org-admin", user_role=LitellmUserRoles.ORG_ADMIN)
 
     result = await new_user(data=data, user_api_key_dict=caller)
     assert result is not None
@@ -1213,14 +1210,10 @@ async def test_update_single_user_non_admin_permissions_rejected(mocker):
         user_id="alice",
         permissions={"get_spend_routes": True},
     )
-    caller = UserAPIKeyAuth(
-        user_id="org-admin", user_role=LitellmUserRoles.ORG_ADMIN
-    )
+    caller = UserAPIKeyAuth(user_id="org-admin", user_role=LitellmUserRoles.ORG_ADMIN)
 
     with pytest.raises(HTTPException) as exc_info:
-        await _update_single_user_helper(
-            user_request=data, user_api_key_dict=caller
-        )
+        await _update_single_user_helper(user_request=data, user_api_key_dict=caller)
     assert exc_info.value.status_code == 403
     assert "permissions" in str(exc_info.value.detail)
 
@@ -1242,14 +1235,10 @@ async def test_update_single_user_non_admin_permissions_explicit_empty_rejected(
 
     data = UpdateUserRequest(user_id="alice", permissions={})
     assert "permissions" in data.model_fields_set
-    caller = UserAPIKeyAuth(
-        user_id="org-admin", user_role=LitellmUserRoles.ORG_ADMIN
-    )
+    caller = UserAPIKeyAuth(user_id="org-admin", user_role=LitellmUserRoles.ORG_ADMIN)
 
     with pytest.raises(HTTPException) as exc_info:
-        await _update_single_user_helper(
-            user_request=data, user_api_key_dict=caller
-        )
+        await _update_single_user_helper(user_request=data, user_api_key_dict=caller)
     assert exc_info.value.status_code == 403
     assert "permissions" in str(exc_info.value.detail)
 
@@ -1563,7 +1552,9 @@ async def test_new_user_applies_email_prefix_to_auto_created_key(mocker):
             user_role="internal_user",
             key_alias="TestKey Name",
         ),
-        user_api_key_dict=UserAPIKeyAuth(user_id="test_admin", user_email="caller@example.com"),
+        user_api_key_dict=UserAPIKeyAuth(
+            user_id="test_admin", user_email="caller@example.com"
+        ),
     )
 
     call_kwargs = mock_generate_key_helper_fn.call_args.kwargs
@@ -1595,12 +1586,18 @@ async def test_new_user_rejects_alias_without_resolvable_email(mocker):
     mocker.patch("litellm.proxy.proxy_server._license_check", mock_license_check)
     mocker.patch(
         "litellm.proxy.management_endpoints.internal_user_endpoints._enforce_email_prefix_on_key_alias",
-        mocker.AsyncMock(side_effect=HTTPException(status_code=400, detail={"error": "missing email"})),
+        mocker.AsyncMock(
+            side_effect=HTTPException(
+                status_code=400, detail={"error": "missing email"}
+            )
+        ),
     )
 
     with pytest.raises(ProxyException) as exc_info:
         await new_user(
-            data=NewUserRequest(user_email=None, user_role="internal_user", key_alias="Needs Alias"),
+            data=NewUserRequest(
+                user_email=None, user_role="internal_user", key_alias="Needs Alias"
+            ),
             user_api_key_dict=UserAPIKeyAuth(user_id="test_admin", user_email=None),
         )
 
@@ -1654,8 +1651,12 @@ async def test_new_user_without_alias_skips_email_prefix_enforcement(mocker):
     )
 
     await new_user(
-        data=NewUserRequest(user_email="owner.user@example.com", user_role="internal_user"),
-        user_api_key_dict=UserAPIKeyAuth(user_id="test_admin", user_email="caller@example.com"),
+        data=NewUserRequest(
+            user_email="owner.user@example.com", user_role="internal_user"
+        ),
+        user_api_key_dict=UserAPIKeyAuth(
+            user_id="test_admin", user_email="caller@example.com"
+        ),
     )
 
     call_kwargs = mock_generate_key_helper_fn.call_args.kwargs
@@ -2994,6 +2995,7 @@ async def test_user_info_v2_response_shape(mocker):
         "user_email": "shape@example.com",
         "user_alias": "Shape Test",
         "user_role": "internal_user",
+        "password_expiry": datetime(2024, 4, 1, tzinfo=timezone.utc),
         "spend": 5.0,
         "max_budget": 50.0,
         "models": ["gpt-3.5-turbo"],
@@ -3036,6 +3038,7 @@ async def test_user_info_v2_response_shape(mocker):
         "user_email",
         "user_alias",
         "user_role",
+        "password_expiry",
         "spend",
         "max_budget",
         "models",
@@ -3756,3 +3759,177 @@ async def test_resolve_user_email_metadata_skips_db_when_no_user_ids(mocker):
 
     assert result == {}
     find_many.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_user_change_password_updates_password_and_expiry(mocker):
+    mock_prisma_client = mocker.MagicMock()
+    mock_prisma_client.update_data = mocker.AsyncMock(
+        return_value={"user_id": "user-1"}
+    )
+    mock_user = mocker.MagicMock()
+    mock_user.model_dump.return_value = {
+        "user_id": "user-1",
+        "password": "scrypt:stored",
+        "user_email": "test@example.com",
+    }
+    mocker.patch("litellm.proxy.proxy_server.prisma_client", mock_prisma_client)
+    mocker.patch(
+        "litellm.proxy.management_endpoints.internal_user_endpoints._get_user_row_by_id_or_throw",
+        new=mocker.AsyncMock(return_value=mock_user),
+    )
+    mocker.patch(
+        "litellm.proxy.management_endpoints.internal_user_endpoints.verify_password",
+        return_value=True,
+    )
+    mocker.patch(
+        "litellm.proxy.management_endpoints.internal_user_endpoints.hash_password",
+        return_value="hashed-new-pass",
+    )
+    mocker.patch(
+        "litellm.proxy.proxy_server.general_settings",
+        {"user_credentials_rotation_interval": "30d"},
+    )
+    mocker.patch(
+        "litellm.proxy.management_endpoints.internal_user_endpoints.duration_in_seconds",
+        return_value=30 * 24 * 60 * 60,
+    )
+
+    response = await user_change_password(
+        data=ChangePasswordRequest(
+            current_password="old-pass", new_password="new-pass"
+        ),
+        user_api_key_dict=UserAPIKeyAuth(
+            user_id="user-1",
+            user_role=LitellmUserRoles.INTERNAL_USER,
+        ),
+    )
+
+    update_call = mock_prisma_client.update_data.await_args
+    assert update_call.kwargs["user_id"] == "user-1"
+    assert update_call.kwargs["data"]["password"] == "hashed-new-pass"
+    assert update_call.kwargs["data"]["password_expiry"] is not None
+    assert response.message == "Password updated successfully"
+    assert response.password_expiry is not None
+
+
+@pytest.mark.asyncio
+async def test_user_change_password_rejects_wrong_current_password(mocker):
+    mock_prisma_client = mocker.MagicMock()
+    mock_user = mocker.MagicMock()
+    mock_user.model_dump.return_value = {
+        "user_id": "user-1",
+        "password": "scrypt:stored",
+        "user_email": "test@example.com",
+    }
+    mocker.patch("litellm.proxy.proxy_server.prisma_client", mock_prisma_client)
+    mocker.patch(
+        "litellm.proxy.management_endpoints.internal_user_endpoints._get_user_row_by_id_or_throw",
+        new=mocker.AsyncMock(return_value=mock_user),
+    )
+    mocker.patch(
+        "litellm.proxy.management_endpoints.internal_user_endpoints.verify_password",
+        return_value=False,
+    )
+
+    with pytest.raises(ProxyException) as exc_info:
+        await user_change_password(
+            data=ChangePasswordRequest(
+                current_password="wrong-pass", new_password="new-pass"
+            ),
+            user_api_key_dict=UserAPIKeyAuth(
+                user_id="user-1",
+                user_role=LitellmUserRoles.INTERNAL_USER,
+            ),
+        )
+
+    assert exc_info.value.code == "401"
+    mock_prisma_client.update_data.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_user_change_password_requires_user_bound_key():
+    with pytest.raises(ProxyException) as exc_info:
+        await user_change_password(
+            data=ChangePasswordRequest(
+                current_password="old-pass", new_password="new-pass"
+            ),
+            user_api_key_dict=UserAPIKeyAuth(
+                user_id=None,
+                user_role=LitellmUserRoles.INTERNAL_USER,
+            ),
+        )
+
+    assert exc_info.value.code == "403"
+    assert "Service-account keys" in str(exc_info.value.message)
+
+
+@pytest.mark.asyncio
+async def test_user_change_password_rejects_users_without_stored_password(mocker):
+    mock_prisma_client = mocker.MagicMock()
+    mock_user = mocker.MagicMock()
+    mock_user.model_dump.return_value = {
+        "user_id": "user-1",
+        "password": None,
+        "user_email": "test@example.com",
+    }
+    mocker.patch("litellm.proxy.proxy_server.prisma_client", mock_prisma_client)
+    mocker.patch(
+        "litellm.proxy.management_endpoints.internal_user_endpoints._get_user_row_by_id_or_throw",
+        new=mocker.AsyncMock(return_value=mock_user),
+    )
+
+    with pytest.raises(ProxyException) as exc_info:
+        await user_change_password(
+            data=ChangePasswordRequest(
+                current_password="old-pass", new_password="new-pass"
+            ),
+            user_api_key_dict=UserAPIKeyAuth(
+                user_id="user-1",
+                user_role=LitellmUserRoles.INTERNAL_USER,
+            ),
+        )
+
+    assert exc_info.value.code == "400"
+    mock_prisma_client.update_data.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_user_info_v2_returns_password_expiry(mocker):
+    password_expiry = datetime.now(timezone.utc)
+    user_row = mocker.MagicMock()
+    user_row.model_dump.return_value = {
+        "user_id": "user-1",
+        "user_email": "test@example.com",
+        "user_alias": "Test User",
+        "user_role": LitellmUserRoles.INTERNAL_USER,
+        "spend": 0.0,
+        "max_budget": None,
+        "models": [],
+        "budget_duration": None,
+        "budget_reset_at": None,
+        "metadata": None,
+        "created_at": password_expiry,
+        "updated_at": password_expiry,
+        "password_expiry": password_expiry,
+        "sso_user_id": None,
+        "teams": [],
+    }
+    mocker.patch("litellm.proxy.proxy_server.prisma_client", mocker.MagicMock())
+    mocker.patch(
+        "litellm.proxy.management_endpoints.internal_user_endpoints._check_user_info_v2_access",
+        new=mocker.AsyncMock(return_value=user_row),
+    )
+
+    response = await user_info_v2(
+        request=mocker.MagicMock(),
+        user_id=None,
+        user_api_key_dict=UserAPIKeyAuth(
+            user_id="user-1",
+            user_role=LitellmUserRoles.INTERNAL_USER,
+        ),
+    )
+
+    assert response.password_expiry == password_expiry
+    assert response.user_id == "user-1"
+    assert response.user_email == "test@example.com"
