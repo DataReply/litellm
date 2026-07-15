@@ -90,12 +90,7 @@ proxy_config = {
     }
   },
   litellm_settings = {
-    callbacks = ["smtp_email", "compression_interception"]
-    compression_interception_params : {
-      enabled             = true
-      compression_trigger = 10000
-      compression_target  = 7000
-    }
+    callbacks                          = ["smtp_email", ]
     route_all_chat_openai_to_responses = true # Recommended
     mcp_semantic_tool_filter = {
       enabled              = true
