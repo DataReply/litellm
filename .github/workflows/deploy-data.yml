@@ -143,14 +143,14 @@ jobs:
       - name: Terraform Validate
         run: terraform validate
 
-      - name: Bootstrap ECR repositories
-        run: |
-          terraform apply -auto-approve \
-            -var-file=config/prod/terraform.tfvars \
-            -target=aws_ecr_repository.gateway \
-            -target=aws_ecr_repository.backend \
-            -target=aws_ecr_repository.ui \
-            -target=aws_ecr_repository.migrations
+      # - name: Bootstrap ECR repositories
+      #   run: |
+      #     terraform apply -auto-approve \
+      #       -var-file=config/prod/terraform.tfvars \
+      #       -target=aws_ecr_repository.gateway \
+      #       -target=aws_ecr_repository.backend \
+      #       -target=aws_ecr_repository.ui \
+      #       -target=aws_ecr_repository.migrations
 
       - name: Read ECR repository URLs
         id: ecr
