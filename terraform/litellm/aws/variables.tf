@@ -523,9 +523,12 @@ variable "bedrock_models" {
     application inference profiles, proxy_config model_list entries, and the
     Bedrock IAM allowlist from this single source of truth.
 
-    `model` must be a LiteLLM Bedrock model string such as:
-    - `bedrock/anthropic.claude-sonnet-4-5-20250929-v1:0`
-    - `bedrock/eu.anthropic.claude-sonnet-4-5-20250929-v1:0`
+    `model` must be either:
+    - A LiteLLM Bedrock model string such as:
+      - `bedrock/anthropic.claude-sonnet-4-5-20250929-v1:0`
+      - `bedrock/eu.anthropic.claude-sonnet-4-5-20250929-v1:0`
+    - A system-defined inference profile ARN such as:
+      - `arn:aws:bedrock:eu-central-1:751812493785:inference-profile/eu.anthropic.claude-haiku-4-5-20251001-v1:0`
   EOT
   type = list(object({
     model_name = string
@@ -535,9 +538,10 @@ variable "bedrock_models" {
 
   validation {
     condition = alltrue([
-      for model in var.bedrock_models : startswith(model.model, "bedrock/")
+      for model in var.bedrock_models :
+      startswith(model.model, "bedrock/") || startswith(model.model, "arn:aws:bedrock:")
     ])
-    error_message = "Every bedrock_models[*].model must start with \"bedrock/\"."
+    error_message = "Every bedrock_models[*].model must start with either \"bedrock/\" or \"arn:aws:bedrock:\"."
   }
 }
 

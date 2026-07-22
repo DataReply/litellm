@@ -20,6 +20,7 @@ data "aws_caller_identity" "bedrock_current" {}
 
 locals {
   bedrock_cross_region_prefixes = ["global", "us", "eu", "apac", "jp", "au", "us-gov"]
+  bedrock_system_profile_prefix = "arn:aws:bedrock:"
 
   bedrock_models_by_name = {
     for model in var.bedrock_models : model.model_name => replace(
@@ -35,9 +36,13 @@ locals {
 
   bedrock_inference_profile_sources = {
     for model_name, model_id in local.bedrock_models_by_name : model_name => (
-      contains(local.bedrock_cross_region_prefixes, split(model_id, ".")[0]) ?
-      "arn:${data.aws_partition.current.partition}:bedrock:${var.region}:${data.aws_caller_identity.bedrock_current.account_id}:inference-profile/${model_id}" :
-      "arn:${data.aws_partition.current.partition}:bedrock:${var.region}::foundation-model/${model_id}"
+      startswith(model_id, local.bedrock_system_profile_prefix) ?
+      model_id :
+      (
+        contains(local.bedrock_cross_region_prefixes, split(model_id, ".")[0]) ?
+        "arn:${data.aws_partition.current.partition}:bedrock:${var.region}:${data.aws_caller_identity.bedrock_current.account_id}:inference-profile/${model_id}" :
+        "arn:${data.aws_partition.current.partition}:bedrock:${var.region}::foundation-model/${model_id}"
+      )
     )
   }
 
