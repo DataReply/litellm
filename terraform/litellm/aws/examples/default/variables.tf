@@ -127,6 +127,15 @@ variable "proxy_config" {
   default     = {}
 }
 
+variable "bedrock_models" {
+  description = "Bedrock deployments to expose through LiteLLM. Empty leaves Bedrock unmanaged."
+  type = list(object({
+    model_name = string
+    model      = string
+  }))
+  default = []
+}
+
 variable "gateway_extra_env" {
   description = "Plain-text env vars layered onto the gateway."
   type        = map(string)

@@ -35,6 +35,7 @@ module "litellm" {
   skip_final_snapshot         = var.skip_final_snapshot
 
   proxy_config          = var.proxy_config
+  bedrock_models        = var.bedrock_models
   gateway_extra_env     = var.gateway_extra_env
   backend_extra_env     = var.backend_extra_env
   gateway_extra_secrets = var.gateway_extra_secrets
