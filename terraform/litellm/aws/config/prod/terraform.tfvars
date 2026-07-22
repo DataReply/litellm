@@ -54,6 +54,14 @@ proxy_config = {
       }
     },
     {
+      model_name = "bedrock-claude-sonnet-4-5"
+      litellm_params = {
+        model            = "bedrock/anthropic.claude-sonnet-4-5-20250929-v1:0"
+        aws_role_name    = "os.environ/BEDROCK_ROLE_ARN"
+        aws_session_name = "bedrock-session"
+      }
+    },
+    {
       model_name = "smart-router"
       litellm_params = {
         model = "auto_router/complexity_router"
