@@ -517,6 +517,30 @@ variable "proxy_config" {
   default     = {}
 }
 
+variable "bedrock_models" {
+  description = <<-EOT
+    Bedrock deployments to expose through LiteLLM. Terraform derives the
+    application inference profiles, proxy_config model_list entries, and the
+    Bedrock IAM allowlist from this single source of truth.
+
+    `model` must be a LiteLLM Bedrock model string such as:
+    - `bedrock/anthropic.claude-sonnet-4-5-20250929-v1:0`
+    - `bedrock/eu.anthropic.claude-sonnet-4-5-20250929-v1:0`
+  EOT
+  type = list(object({
+    model_name = string
+    model      = string
+  }))
+  default = []
+
+  validation {
+    condition = alltrue([
+      for model in var.bedrock_models : startswith(model.model, "bedrock/")
+    ])
+    error_message = "Every bedrock_models[*].model must start with \"bedrock/\"."
+  }
+}
+
 variable "log_retention_days" {
   description = "CloudWatch log retention for the three services."
   type        = number

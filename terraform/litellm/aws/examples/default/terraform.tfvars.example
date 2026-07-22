@@ -60,6 +60,16 @@ env    = "stage"
 #   }
 # }
 
+# ---------- Bedrock ----------
+# Each entry creates an AWS application inference profile automatically and
+# wires its ARN into LiteLLM as model_id.
+# bedrock_models = [
+#   {
+#     model_name = "bedrock-claude-sonnet-4-5"
+#     model      = "bedrock/eu.anthropic.claude-sonnet-4-5-20250929-v1:0"
+#   }
+# ]
+
 # ---------- Extra env / secrets ----------
 # Plain-text env vars (non-sensitive). Land directly in the ECS task def.
 # gateway_extra_env = {
