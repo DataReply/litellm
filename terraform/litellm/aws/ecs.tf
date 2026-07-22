@@ -99,6 +99,7 @@ locals {
       # (e.g. cache backend, request log archival, /files passthrough).
       { name = "S3_BUCKET_NAME", value = aws_s3_bucket.this.bucket },
       { name = "S3_REGION_NAME", value = var.region },
+      { name = "BEDROCK_ROLE_ARN", value = aws_iam_role.litellm_bedrock_role.arn },
       # boto3 inside generate_iam_auth_token reads AWS_REGION_NAME first, then
       # AWS_REGION. Set both for compatibility.
       { name = "AWS_REGION", value = var.region },
