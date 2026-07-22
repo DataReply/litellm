@@ -153,10 +153,12 @@ locals {
     }
   ]
 
-  merged_proxy_config = length(local.bedrock_model_list) == 0 ? var.proxy_config : merge(
+  proxy_config_model_list = try(var.proxy_config.model_list, [])
+
+  merged_proxy_config = merge(
     var.proxy_config,
     {
-      model_list = concat(try(var.proxy_config.model_list, []), local.bedrock_model_list)
+      model_list = concat(local.proxy_config_model_list, local.bedrock_model_list)
     },
   )
 
@@ -166,7 +168,7 @@ locals {
   # downloads it to /tmp/litellm-config.yaml via boto3 before exec'ing
   # uvicorn. The S3 object's etag is embedded in the task definition so a
   # config edit forces a new task-def revision and a rolling redeploy.
-  proxy_config_enabled = length(keys(local.merged_proxy_config)) > 0
+  proxy_config_enabled = length(keys(var.proxy_config)) > 0 || length(local.bedrock_model_list) > 0
   proxy_config_path    = "/tmp/litellm-config.yaml"
 
   proxy_config_env = local.proxy_config_enabled ? [
