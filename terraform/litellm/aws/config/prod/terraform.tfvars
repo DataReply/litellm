@@ -60,12 +60,12 @@ proxy_config = {
         complexity_router_config = {
           tiers = {
             SIMPLE    = "gpt-5.4-mini"
-            MEDIUM    = "gpt-5.4"
+            MEDIUM    = "bedrock-anthropic-sonnet-5"
             COMPLEX   = "gpt-5.5"
-            REASONING = "gpt-5.5"
+            REASONING = "bedrock-anthropic-opus-4.8"
           }
         }
-        complexity_router_default_model = "gpt-5.4-mini"
+        complexity_router_default_model = "bedrock-anthropic-sonnet-5"
       }
     }
   ]
@@ -126,9 +126,14 @@ bedrock_models = [
     model      = "bedrock/zai.glm-4.7-flash"
   },
   {
-    model_name = "bedrock-anthropic-haiku-4.5"
-    model      = "bedrock/eu.anthropic.claude-haiku-4-5-20251001-v1:0"
-    model_id   = "arn:aws:bedrock:eu-central-1:751812493785:inference-profile/eu.anthropic.claude-haiku-4-5-20251001-v1:0"
+    model_name = "bedrock-anthropic-sonnet-5"
+    model      = "bedrock/eu.anthropic.claude-sonnet-5"
+    model_id   = "arn:aws:bedrock:eu-central-1:751812493785:inference-profile/eu.anthropic.claude-sonnet-5"
+  },
+  {
+    model_name = "bedrock-anthropic-opus-4.8"
+    model      = "bedrock/eu.anthropic.claude-opus-4-8"
+    model_id   = "arn:aws:bedrock:eu-central-1:751812493785:inference-profile/eu.anthropic.claude-opus-4-8"
   }
 ]
 
