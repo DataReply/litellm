@@ -520,8 +520,8 @@ variable "proxy_config" {
 variable "bedrock_models" {
   description = <<-EOT
     Bedrock deployments to expose through LiteLLM. Terraform derives the
-    application inference profiles, proxy_config model_list entries, and the
-    Bedrock IAM allowlist from this single source of truth.
+    proxy_config model_list entries and the Bedrock IAM allowlist from this
+    single source of truth.
 
     `model` must be either:
     - A LiteLLM Bedrock model string such as:
@@ -529,10 +529,16 @@ variable "bedrock_models" {
       - `bedrock/eu.anthropic.claude-sonnet-4-5-20250929-v1:0`
     - A system-defined inference profile ARN such as:
       - `arn:aws:bedrock:eu-central-1:751812493785:inference-profile/eu.anthropic.claude-haiku-4-5-20251001-v1:0`
+
+    `model_id`, when set, is passed straight to LiteLLM and skips application
+    inference profile creation for that entry. Use it to keep a friendly
+    `model_name` alias while targeting an existing Bedrock inference profile
+    ARN.
   EOT
   type = list(object({
     model_name = string
     model      = string
+    model_id   = optional(string)
   }))
   default = []
 
@@ -542,6 +548,14 @@ variable "bedrock_models" {
       startswith(model.model, "bedrock/") || startswith(model.model, "arn:aws:bedrock:")
     ])
     error_message = "Every bedrock_models[*].model must start with either \"bedrock/\" or \"arn:aws:bedrock:\"."
+  }
+
+  validation {
+    condition = alltrue([
+      for model in var.bedrock_models :
+      try(model.model_id == null || startswith(model.model_id, "arn:aws:bedrock:"), true)
+    ])
+    error_message = "Every bedrock_models[*].model_id must start with \"arn:aws:bedrock:\" when set."
   }
 }
 

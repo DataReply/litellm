@@ -132,6 +132,7 @@ variable "bedrock_models" {
   type = list(object({
     model_name = string
     model      = string
+    model_id   = optional(string)
   }))
   default = []
 }

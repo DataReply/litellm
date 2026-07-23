@@ -127,7 +127,8 @@ bedrock_models = [
   },
   {
     model_name = "bedrock-anthropic-haiku-4.5"
-    model      = "arn:aws:bedrock:eu-central-1:751812493785:inference-profile/eu.anthropic.claude-haiku-4-5-20251001-v1:0"
+    model      = "bedrock/eu.anthropic.claude-haiku-4-5-20251001-v1:0"
+    model_id   = "arn:aws:bedrock:eu-central-1:751812493785:inference-profile/eu.anthropic.claude-haiku-4-5-20251001-v1:0"
   }
 ]
 

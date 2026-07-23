@@ -61,12 +61,20 @@ env    = "stage"
 # }
 
 # ---------- Bedrock ----------
-# Each entry creates an AWS application inference profile automatically and
-# wires its ARN into LiteLLM as model_id.
+# Each entry keeps model_name as the LiteLLM alias clients call.
+# If model_id is omitted, Terraform creates an AWS application inference
+# profile automatically and wires its ARN into LiteLLM as model_id.
+# If model_id is set, Terraform skips application inference profile creation
+# and passes that ARN through directly instead.
 # bedrock_models = [
 #   {
 #     model_name = "bedrock-claude-sonnet-4-5"
 #     model      = "bedrock/eu.anthropic.claude-sonnet-4-5-20250929-v1:0"
+#   },
+#   {
+#     model_name = "bedrock-claude-haiku-4-5"
+#     model      = "bedrock/eu.anthropic.claude-haiku-4-5-20251001-v1:0"
+#     model_id   = "arn:aws:bedrock:eu-central-1:123456789012:inference-profile/eu.anthropic.claude-haiku-4-5-20251001-v1:0"
 #   }
 # ]
 

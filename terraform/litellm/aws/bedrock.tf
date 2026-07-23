@@ -22,7 +22,11 @@ locals {
   bedrock_cross_region_prefixes = ["global", "us", "eu", "apac", "jp", "au", "us-gov"]
   bedrock_system_profile_prefix = "arn:aws:bedrock:"
 
-  bedrock_models_by_name = {
+  bedrock_explicit_model_ids_by_name = {
+    for model in var.bedrock_models : model.model_name => try(model.model_id, null)
+  }
+
+  bedrock_model_ids_by_name = {
     for model in var.bedrock_models : model.model_name => replace(
       replace(
         replace(model.model, "bedrock/converse/", ""),
@@ -35,37 +39,45 @@ locals {
   }
 
   bedrock_inference_profile_sources = {
-    for model_name, model_id in local.bedrock_models_by_name : model_name => (
+    for model_name, model_id in local.bedrock_model_ids_by_name : model_name => (
       startswith(model_id, local.bedrock_system_profile_prefix) ?
       model_id :
       (
-        contains(local.bedrock_cross_region_prefixes, split(model_id, ".")[0]) ?
+        contains(local.bedrock_cross_region_prefixes, split(".", model_id)[0]) ?
         "arn:${data.aws_partition.current.partition}:bedrock:${var.region}:${data.aws_caller_identity.bedrock_current.account_id}:inference-profile/${model_id}" :
         "arn:${data.aws_partition.current.partition}:bedrock:${var.region}::foundation-model/${model_id}"
       )
     )
+    if local.bedrock_explicit_model_ids_by_name[model_name] == null
   }
 
-  bedrock_backing_foundation_model_ids = distinct([
-    for model_id in values(local.bedrock_models_by_name) : (
-      contains(local.bedrock_cross_region_prefixes, split(model_id, ".")[0]) ?
-      join(".", slice(split(model_id, "."), 1, length(split(model_id, ".")))) :
-      model_id
-    )
-  ])
-
   bedrock_source_profile_arns = distinct([
-    for model_id in values(local.bedrock_models_by_name) :
+    for model_id in values(local.bedrock_model_ids_by_name) :
     "arn:${data.aws_partition.current.partition}:bedrock:${var.region}:${data.aws_caller_identity.bedrock_current.account_id}:inference-profile/${model_id}"
-    if contains(local.bedrock_cross_region_prefixes, split(model_id, ".")[0])
+    if contains(local.bedrock_cross_region_prefixes, split(".", model_id)[0])
   ])
 
   bedrock_foundation_model_arns = distinct(flatten([
-    for model_id in local.bedrock_backing_foundation_model_ids : [
-      "arn:${data.aws_partition.current.partition}:bedrock:${var.region}::foundation-model/${model_id}",
-      "arn:${data.aws_partition.current.partition}:bedrock:::foundation-model/${model_id}",
-    ]
+    for model_id in values(local.bedrock_model_ids_by_name) : (
+      contains(local.bedrock_cross_region_prefixes, split(".", model_id)[0]) ?
+      [
+        "arn:${data.aws_partition.current.partition}:bedrock:${split(".", model_id)[0]}-*::foundation-model/${join(".", slice(split(".", model_id), 1, length(split(".", model_id))))}",
+        "arn:${data.aws_partition.current.partition}:bedrock:::foundation-model/${join(".", slice(split(".", model_id), 1, length(split(".", model_id))))}",
+      ] :
+      [
+        "arn:${data.aws_partition.current.partition}:bedrock:${var.region}::foundation-model/${model_id}",
+        "arn:${data.aws_partition.current.partition}:bedrock:::foundation-model/${model_id}",
+      ]
+    )
   ]))
+
+  bedrock_backing_foundation_model_ids = distinct([
+    for model_id in values(local.bedrock_model_ids_by_name) : (
+      contains(local.bedrock_cross_region_prefixes, split(".", model_id)[0]) ?
+      join(".", slice(split(".", model_id), 1, length(split(".", model_id)))) :
+      model_id
+    )
+  ])
 
   bedrock_application_profile_arns = [
     for profile in aws_bedrock_inference_profile.model : profile.arn

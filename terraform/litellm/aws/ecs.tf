@@ -146,8 +146,9 @@ locals {
       model_name = model.model_name
       litellm_params = {
         model            = model.model
-        model_id         = aws_bedrock_inference_profile.model[model.model_name].arn
+        model_id         = try(model.model_id, null) != null ? model.model_id : aws_bedrock_inference_profile.model[model.model_name].arn
         aws_role_name    = "os.environ/BEDROCK_ROLE_ARN"
+        aws_region_name  = var.region
         aws_session_name = "bedrock-session"
       }
     }
