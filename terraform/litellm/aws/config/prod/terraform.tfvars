@@ -73,25 +73,25 @@ proxy_config = {
     master_key                        = "os.environ/LITELLM_MASTER_KEY"
     database_url                      = "os.environ/DATABASE_URL"
     enforce_email_prefix_on_key_alias = true
-    key_management_system             = "aws_secret_manager"
-    key_management_settings = {
-      hosted_keys = [
-        "MICROSOFT_ENTRA_CLIENT_ID",
-        "MICROSOFT_ENTRA_CLIENT_SECRET",
-        "MICROSOFT_ENTRA_TENANT"
-      ]
-      primary_secret_name = "data-reply/litellm/microsoft/entra"
-    }
+    # key_management_system             = "aws_secret_manager"
+    # key_management_settings = {
+    #   hosted_keys = [
+    #     "MICROSOFT_ENTRA_CLIENT_ID",
+    #     "MICROSOFT_ENTRA_CLIENT_SECRET",
+    #     "MICROSOFT_ENTRA_TENANT"
+    #   ]
+    #   primary_secret_name = "data-reply/litellm/microsoft/entra"
+    # }
+    # auto_redirect_ui_login_to_sso = true
 
-    alerting                      = ["email", "slack_budget_alerts", "slack"]
-    alert_types                   = ["budget_alerts", "spend_reports"]
-    alerting_threshold            = 300
-    cancel_on_disconnect          = true
-    enable_pre_call_checks        = true
-    disable_spend_logs            = false
-    disable_spend_updates         = false
-    store_prompts_in_spend_logs   = false
-    auto_redirect_ui_login_to_sso = true
+    alerting                    = ["email", "slack_budget_alerts", "slack"]
+    alert_types                 = ["budget_alerts", "spend_reports"]
+    alerting_threshold          = 300
+    cancel_on_disconnect        = true
+    enable_pre_call_checks      = true
+    disable_spend_logs          = false
+    disable_spend_updates       = false
+    store_prompts_in_spend_logs = false
 
     alerting_args = {
       daily_report_frequency       = 43200 # 12 hours in seconds
@@ -147,16 +147,16 @@ bedrock_models = [
 gateway_extra_env = {}
 
 backend_extra_env = {
-  SMTP_HOST               = "email-smtp.eu-central-1.amazonaws.com"
-  SMTP_TLS                = "True"
-  SMTP_PORT               = "587"
-  SMTP_SENDER_EMAIL       = "data.awsacccounts.management@reply.de"
-  PROXY_BASE_URL          = "https://litellm.datareply.de"
-  STORE_MODEL_IN_DB       = true
-  DISABLE_ADMIN_UI        = false
-  MICROSOFT_CLIENT_ID     = "os.environ/MICROSOFT_ENTRA_CLIENT_ID"
-  MICROSOFT_CLIENT_SECRET = "os.environ/MICROSOFT_ENTRA_CLIENT_SECRET"
-  MICROSOFT_TENANT        = "os.environ/MICROSOFT_ENTRA_TENANT"
+  SMTP_HOST         = "email-smtp.eu-central-1.amazonaws.com"
+  SMTP_TLS          = "True"
+  SMTP_PORT         = "587"
+  SMTP_SENDER_EMAIL = "data.awsacccounts.management@reply.de"
+  PROXY_BASE_URL    = "https://litellm.datareply.de"
+  STORE_MODEL_IN_DB = true
+  DISABLE_ADMIN_UI  = false
+  # MICROSOFT_CLIENT_ID     = "os.environ/MICROSOFT_ENTRA_CLIENT_ID"
+  # MICROSOFT_CLIENT_SECRET = "os.environ/MICROSOFT_ENTRA_CLIENT_SECRET"
+  # MICROSOFT_TENANT        = "os.environ/MICROSOFT_ENTRA_TENANT"
 }
 
 backend_extra_secrets = {
