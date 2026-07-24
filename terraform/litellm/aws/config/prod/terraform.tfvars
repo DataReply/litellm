@@ -67,7 +67,14 @@ proxy_config = {
         }
         complexity_router_default_model = "gpt-5.4-mini"
       }
-    }
+    },
+    {
+      model_name = "codex-auto-review"
+      litellm_params = {
+        model   = "openai/gpt-5.4-mini"
+        api_key = "os.environ/OPENAI_API_KEY"
+      }
+    },
   ]
   general_settings = {
     master_key                        = "os.environ/LITELLM_MASTER_KEY"
