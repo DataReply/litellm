@@ -71,7 +71,7 @@ proxy_config = {
     {
       model_name = "codex-auto-review"
       litellm_params = {
-        model   = "openai/gpt-5.4-mini"
+        model   = "openai/gpt-5-mini"
         api_key = "os.environ/OPENAI_API_KEY"
       }
     },
