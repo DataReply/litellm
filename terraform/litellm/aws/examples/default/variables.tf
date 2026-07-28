@@ -49,8 +49,14 @@ variable "ui_password" {
 }
 
 # TLS — provide an ACM cert for production, or opt into HTTP-only for dev.
-variable "acm_certificate_arn" {
-  description = "ACM cert ARN for the ALB HTTPS listener. Empty → no TLS."
+variable "acm_certificate_domain_name" {
+  description = "ACM cert domain name for the ALB HTTPS listener. Empty → no TLS."
+  type        = string
+  default     = ""
+}
+
+variable "route53_zone_id" {
+  description = "Route53 hosted zone ID for the TLS hostname. Empty → manage DNS elsewhere."
   type        = string
   default     = ""
 }
@@ -73,10 +79,62 @@ variable "skip_final_snapshot" {
   default     = false
 }
 
+variable "db_enable_reader" {
+  description = "Create a reader instance alongside the primary instance."
+  type        = bool
+  default     = true
+}
+
+variable "db_primary_instance_identifier" {
+  description = "DB instance identifier for the primary instance. Leave unset to use the module default."
+  type        = string
+  default     = null
+}
+
+variable "db_reader_instance_identifier" {
+  description = "DB instance identifier for the reader instance. Leave unset to use the module default."
+  type        = string
+  default     = null
+}
+
+variable "db_writer_instance_class" {
+  description = "Aurora instance class for the primary instance. Leave unset to use the module default."
+  type        = string
+  default     = null
+}
+
+variable "db_reader_instance_class" {
+  description = "Aurora instance class for the reader instance. Leave unset to use the module default."
+  type        = string
+  default     = null
+}
+
+variable "db_serverless_min_capacity" {
+  description = "Aurora Serverless v2 minimum ACUs. Empty means leave unmanaged by this wrapper."
+  type        = number
+  default     = null
+}
+
+variable "db_serverless_max_capacity" {
+  description = "Aurora Serverless v2 maximum ACUs. Empty means leave unmanaged by this wrapper."
+  type        = number
+  default     = null
+}
+
 variable "proxy_config" {
   description = "LiteLLM proxy config (contents of config.yaml). Empty → defaults."
   type        = any
   default     = {}
+}
+
+variable "bedrock_models" {
+  description = "Bedrock deployments to expose through LiteLLM. Empty leaves Bedrock unmanaged."
+  type = list(object({
+    model_name = string
+    model      = string
+    model_id   = optional(string)
+  }))
+  default = []
 }
 
 variable "gateway_extra_env" {

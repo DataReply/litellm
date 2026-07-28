@@ -4,7 +4,7 @@ output "alb_dns_name" {
 }
 
 output "alb_url" {
-  description = "Proxy URL. Switches scheme based on whether acm_certificate_arn is set; the underlying DNS name is the ALB. The dashboard is served at /, the API at /v1/*."
+  description = "Proxy URL. Switches scheme based on whether acm_certificate_domain_name is set; the underlying DNS name is the ALB. The dashboard is served at /, the API at /v1/*."
   value       = "${local.tls_enabled ? "https" : "http"}://${aws_lb.this.dns_name}"
 }
 
@@ -19,8 +19,8 @@ output "aurora_writer_endpoint" {
 }
 
 output "aurora_reader_endpoint" {
-  description = "Aurora reader endpoint. Used by gateway/backend as DATABASE_HOST_READ_REPLICA."
-  value       = aws_rds_cluster.this.reader_endpoint
+  description = "Aurora reader endpoint when a reader exists. Used by gateway/backend as DATABASE_HOST_READ_REPLICA."
+  value       = var.db_enable_reader ? aws_rds_cluster.this.reader_endpoint : null
 }
 
 output "redis_endpoint" {
@@ -31,6 +31,26 @@ output "redis_endpoint" {
 output "s3_bucket" {
   description = "S3 bucket name. Exposed to gateway + backend as S3_BUCKET_NAME / S3_REGION_NAME. Reference from proxy_config via `os.environ/S3_BUCKET_NAME`."
   value       = aws_s3_bucket.this.bucket
+}
+
+output "gateway_ecr_repository_url" {
+  description = "ECR repository URL for the gateway image."
+  value       = aws_ecr_repository.gateway.repository_url
+}
+
+output "backend_ecr_repository_url" {
+  description = "ECR repository URL for the backend image."
+  value       = aws_ecr_repository.backend.repository_url
+}
+
+output "ui_ecr_repository_url" {
+  description = "ECR repository URL for the UI image."
+  value       = aws_ecr_repository.ui.repository_url
+}
+
+output "migrations_ecr_repository_url" {
+  description = "ECR repository URL for the migrations image."
+  value       = aws_ecr_repository.migrations.repository_url
 }
 
 output "master_key_secret_arn" {

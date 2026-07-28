@@ -1,3 +1,52 @@
+resource "aws_acm_certificate" "cert" {
+  count             = local.tls_enabled ? 1 : 0
+  domain_name       = var.acm_certificate_domain_name
+  validation_method = "DNS"
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+resource "aws_route53_record" "cert_validation" {
+  for_each = local.manage_route53 ? {
+    for option in aws_acm_certificate.cert[0].domain_validation_options : option.domain_name => {
+      name   = option.resource_record_name
+      record = option.resource_record_value
+      type   = option.resource_record_type
+    }
+  } : {}
+
+  allow_overwrite = true
+  zone_id         = var.route53_zone_id
+  name            = each.value.name
+  records         = [each.value.record]
+  ttl             = 60
+  type            = each.value.type
+}
+
+resource "aws_acm_certificate_validation" "cert" {
+  count = local.manage_route53 ? 1 : 0
+
+  certificate_arn         = aws_acm_certificate.cert[0].arn
+  validation_record_fqdns = [for record in aws_route53_record.cert_validation : record.fqdn]
+}
+
+resource "aws_route53_record" "alb_alias" {
+  for_each = local.manage_route53 ? toset(["A", "AAAA"]) : toset([])
+
+  zone_id = var.route53_zone_id
+  name    = var.acm_certificate_domain_name
+  type    = each.value
+
+  alias {
+    evaluate_target_health = true
+    name                   = aws_lb.this.dns_name
+    zone_id                = aws_lb.this.zone_id
+  }
+}
+
+
 resource "aws_lb" "this" {
   name               = local.name
   load_balancer_type = "application"
@@ -11,9 +60,10 @@ resource "aws_lb" "this" {
 }
 
 locals {
-  # When an ACM cert ARN is provided we provision a 443 listener carrying
+  # When a domain name is provided we provision a 443 listener carrying
   # the path-routing rules and downgrade the 80 listener to a redirect.
-  tls_enabled        = var.acm_certificate_arn != ""
+  tls_enabled        = var.acm_certificate_domain_name != ""
+  manage_route53     = local.tls_enabled && var.route53_zone_id != ""
   rules_listener_arn = local.tls_enabled ? aws_lb_listener.https[0].arn : aws_lb_listener.http.arn
 }
 
@@ -111,7 +161,7 @@ resource "aws_lb_listener" "http" {
   lifecycle {
     precondition {
       condition     = local.tls_enabled || var.allow_plaintext_alb
-      error_message = "ALB has no HTTPS listener. Either set `acm_certificate_arn` to enable TLS, or set `allow_plaintext_alb = true` to opt into HTTP-only (trial / dev only)."
+      error_message = "ALB has no HTTPS listener. Either set `acm_certificate_domain_name` to enable TLS, or set `allow_plaintext_alb = true` to opt into HTTP-only (trial / dev only)."
     }
   }
 
@@ -126,7 +176,7 @@ resource "aws_lb_listener" "https" {
   port              = 443
   protocol          = "HTTPS"
   ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
-  certificate_arn   = var.acm_certificate_arn
+  certificate_arn   = local.manage_route53 ? aws_acm_certificate_validation.cert[0].certificate_arn : aws_acm_certificate.cert[0].arn
 
   default_action {
     type             = "forward"

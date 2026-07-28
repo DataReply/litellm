@@ -161,13 +161,35 @@ locals {
     for k, v in var.backend_extra_secrets : { name = k, valueFrom = v }
   ]
 
+  bedrock_model_list = [
+    for model in var.bedrock_models : {
+      model_name = model.model_name
+      litellm_params = {
+        model            = model.model
+        model_id         = try(model.model_id, null) != null ? model.model_id : aws_bedrock_inference_profile.model[model.model_name].arn
+        aws_role_name    = "os.environ/BEDROCK_ROLE_ARN"
+        aws_region_name  = var.region
+        aws_session_name = "bedrock-session"
+      }
+    }
+  ]
+
+  proxy_config_model_list = try(var.proxy_config.model_list, [])
+
+  merged_proxy_config = merge(
+    var.proxy_config,
+    {
+      model_list = concat(local.proxy_config_model_list, local.bedrock_model_list)
+    },
+  )
+
   # Mirrors the helm chart's gateway.config.create / configmap pattern.
   # ECS Fargate has no ConfigMap analogue, so the YAML is uploaded to S3
   # (see aws_s3_object.proxy_config in s3.tf) and the container entrypoint
   # downloads it to /tmp/litellm-config.yaml via boto3 before exec'ing
   # uvicorn. The S3 object's etag is embedded in the task definition so a
   # config edit forces a new task-def revision and a rolling redeploy.
-  proxy_config_enabled = length(keys(var.proxy_config)) > 0
+  proxy_config_enabled = length(keys(var.proxy_config)) > 0 || length(local.bedrock_model_list) > 0
   proxy_config_path    = "/tmp/litellm-config.yaml"
 
   proxy_config_env = local.proxy_config_enabled ? [

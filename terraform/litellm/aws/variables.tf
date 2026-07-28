@@ -280,9 +280,59 @@ variable "ui_cpu_target" {
 # ---------- RDS ----------
 
 variable "db_instance_class" {
-  description = "Aurora instance class for both writer and reader."
+  description = "Default Aurora instance class for both writer and reader when the per-instance overrides are unset."
   type        = string
   default     = "db.r6g.large"
+}
+
+variable "db_writer_instance_class" {
+  description = "Aurora instance class for the primary instance. Leave unset to inherit db_instance_class."
+  type        = string
+  default     = null
+}
+
+variable "db_reader_instance_class" {
+  description = "Aurora instance class for the reader instance. Leave unset to inherit db_instance_class."
+  type        = string
+  default     = null
+}
+
+variable "db_primary_instance_identifier" {
+  description = "DB instance identifier for the primary instance. Leave unset to use <tenant>-litellm-<env>-writer."
+  type        = string
+  default     = null
+}
+
+variable "db_reader_instance_identifier" {
+  description = "DB instance identifier for the reader instance. Leave unset to use <tenant>-litellm-<env>-reader."
+  type        = string
+  default     = null
+}
+
+variable "db_enable_reader" {
+  description = "Create a reader instance alongside the primary instance."
+  type        = bool
+  default     = true
+}
+
+variable "db_serverless_min_capacity" {
+  description = "Aurora Serverless v2 minimum ACUs for the cluster. Leave unset unless you want this module to manage the Serverless v2 scaling range."
+  type        = number
+  default     = null
+}
+
+variable "db_serverless_max_capacity" {
+  description = "Aurora Serverless v2 maximum ACUs for the cluster. Leave unset unless you want this module to manage the Serverless v2 scaling range."
+  type        = number
+  default     = null
+
+  validation {
+    condition = (
+      (var.db_serverless_min_capacity == null) == (var.db_serverless_max_capacity == null)
+      && (var.db_serverless_min_capacity == null || var.db_serverless_min_capacity <= var.db_serverless_max_capacity)
+    )
+    error_message = "db_serverless_min_capacity and db_serverless_max_capacity must either both be unset or both be set, and min must be <= max."
+  }
 }
 
 variable "db_engine_version" {
@@ -330,13 +380,27 @@ variable "redis_num_replicas" {
 
 # ---------- TLS ----------
 
-variable "acm_certificate_arn" {
+variable "acm_certificate_domain_name" {
   description = <<-EOT
-    ACM certificate ARN for the ALB's HTTPS listener. When set, the stack
-    provisions a 443 listener carrying the same path-routing rules as the 80
-    listener, and the 80 listener is rewritten to redirect HTTP→HTTPS. Leave
+    Domain name to request in ACM for the ALB's HTTPS listener. When set, the
+    stack requests a DNS-validated certificate for this hostname, provisions a
+    443 listener carrying the same path-routing rules as the 80 listener, and
+    rewrites the 80 listener to redirect HTTP→HTTPS. Set `route53_zone_id` to
+    have this module create the ACM validation records and the public ALB alias
+    record in Route53; otherwise manage both in your DNS zone yourself. Leave
     empty ("") to disable TLS (must combine with `allow_plaintext_alb = true`
     for the plan to succeed — see README.md "TLS").
+  EOT
+  type        = string
+  default     = ""
+}
+
+variable "route53_zone_id" {
+  description = <<-EOT
+    Route53 hosted zone ID for `acm_certificate_domain_name`. When set
+    alongside that domain name, the module creates the ACM DNS validation
+    records, waits for certificate issuance, and creates an ALB alias record
+    for the hostname. Leave empty to manage DNS outside this module.
   EOT
   type        = string
   default     = ""
@@ -345,7 +409,7 @@ variable "acm_certificate_arn" {
 variable "allow_plaintext_alb" {
   description = <<-EOT
     Opt into HTTP-only mode on the ALB (port 80, no TLS). Default false:
-    `terraform plan` fails when `acm_certificate_arn = ""` so the operator
+    `terraform plan` fails when `acm_certificate_domain_name = ""` so the operator
     must either provide an ACM cert or consciously opt out. Intended for
     short-lived trial / dev stacks only.
   EOT
@@ -451,6 +515,48 @@ variable "proxy_config" {
   EOT
   type        = any
   default     = {}
+}
+
+variable "bedrock_models" {
+  description = <<-EOT
+    Bedrock deployments to expose through LiteLLM. Terraform derives the
+    proxy_config model_list entries and the Bedrock IAM allowlist from this
+    single source of truth.
+
+    `model` must be either:
+    - A LiteLLM Bedrock model string such as:
+      - `bedrock/anthropic.claude-sonnet-4-5-20250929-v1:0`
+      - `bedrock/eu.anthropic.claude-sonnet-4-5-20250929-v1:0`
+    - A system-defined inference profile ARN such as:
+      - `arn:aws:bedrock:eu-central-1:751812493785:inference-profile/eu.anthropic.claude-haiku-4-5-20251001-v1:0`
+
+    `model_id`, when set, is passed straight to LiteLLM and skips application
+    inference profile creation for that entry. Use it to keep a friendly
+    `model_name` alias while targeting an existing Bedrock inference profile
+    ARN.
+  EOT
+  type = list(object({
+    model_name = string
+    model      = string
+    model_id   = optional(string)
+  }))
+  default = []
+
+  validation {
+    condition = alltrue([
+      for model in var.bedrock_models :
+      startswith(model.model, "bedrock/") || startswith(model.model, "arn:aws:bedrock:")
+    ])
+    error_message = "Every bedrock_models[*].model must start with either \"bedrock/\" or \"arn:aws:bedrock:\"."
+  }
+
+  validation {
+    condition = alltrue([
+      for model in var.bedrock_models :
+      try(model.model_id == null || startswith(model.model_id, "arn:aws:bedrock:"), true)
+    ])
+    error_message = "Every bedrock_models[*].model_id must start with \"arn:aws:bedrock:\" when set."
+  }
 }
 
 variable "log_retention_days" {

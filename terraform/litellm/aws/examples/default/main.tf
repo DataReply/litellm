@@ -28,14 +28,24 @@ module "litellm" {
   litellm_license    = var.litellm_license
   ui_password        = var.ui_password
 
-  acm_certificate_arn = var.acm_certificate_arn
-  allow_plaintext_alb = var.allow_plaintext_alb
-  s3_force_destroy    = var.s3_force_destroy
-  skip_final_snapshot = var.skip_final_snapshot
+  acm_certificate_domain_name = var.acm_certificate_domain_name
+  route53_zone_id             = var.route53_zone_id
+  allow_plaintext_alb         = var.allow_plaintext_alb
+  s3_force_destroy            = var.s3_force_destroy
+  skip_final_snapshot         = var.skip_final_snapshot
 
   proxy_config          = var.proxy_config
+  bedrock_models        = var.bedrock_models
   gateway_extra_env     = var.gateway_extra_env
   backend_extra_env     = var.backend_extra_env
   gateway_extra_secrets = var.gateway_extra_secrets
   backend_extra_secrets = var.backend_extra_secrets
+
+  db_enable_reader               = var.db_enable_reader
+  db_primary_instance_identifier = var.db_primary_instance_identifier
+  db_reader_instance_identifier  = var.db_reader_instance_identifier
+  db_writer_instance_class       = var.db_writer_instance_class
+  db_reader_instance_class       = var.db_reader_instance_class
+  db_serverless_min_capacity     = var.db_serverless_min_capacity
+  db_serverless_max_capacity     = var.db_serverless_max_capacity
 }

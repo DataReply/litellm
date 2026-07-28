@@ -129,6 +129,7 @@ compatibility-matrix.json
 # User-specific variable inputs — example files (terraform.tfvars.example) are
 # tracked because they end in .example, which doesn't match the glob below.
 *.tfvars
+!terraform/litellm/aws/config/**/*.tfvars
 *.auto.tfvars
 crash.log
 crash.*.log

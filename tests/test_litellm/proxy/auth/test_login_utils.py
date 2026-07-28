@@ -6,6 +6,7 @@ to login_utils.py for better reusability.
 """
 
 import os
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -246,6 +247,48 @@ async def test_authenticate_user_wrong_password():
         assert exc_info.value.type == ProxyErrorTypes.auth_error
         assert exc_info.value.code == "401"
         assert "Invalid credentials" in exc_info.value.message
+
+
+@pytest.mark.asyncio
+async def test_authenticate_user_with_expired_password_rejected():
+    """Expired DB-backed credentials should be blocked before a UI session is minted."""
+    master_key = "sk-1234"
+    user_email = "test@example.com"
+    correct_password = "correct-password"
+    hashed_password = hash_token(token=correct_password)
+
+    mock_user = LiteLLM_UserTable(
+        user_id="test-user-123",
+        user_email=user_email,
+        password=hashed_password,
+        password_expiry=datetime.now(timezone.utc) - timedelta(days=1),
+        user_role=LitellmUserRoles.INTERNAL_USER,
+    )
+
+    mock_prisma_client = MagicMock()
+    mock_prisma_client.db.litellm_usertable.find_first = AsyncMock(
+        return_value=mock_user
+    )
+
+    with patch.dict(
+        os.environ,
+        {
+            "DATABASE_URL": "postgresql://test:test@localhost/test",
+            "UI_USERNAME": "admin",
+            "UI_PASSWORD": "admin-password",
+        },
+    ):
+        with pytest.raises(ProxyException) as exc_info:
+            await authenticate_user(
+                username=user_email,
+                password=correct_password,
+                master_key=master_key,
+                prisma_client=mock_prisma_client,
+            )
+
+    assert exc_info.value.type == ProxyErrorTypes.auth_error
+    assert exc_info.value.code == "401"
+    assert "expired" in exc_info.value.message.lower()
 
 
 @pytest.mark.asyncio
