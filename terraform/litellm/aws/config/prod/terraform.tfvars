@@ -113,7 +113,9 @@ proxy_config = {
     }
   },
   litellm_settings = {
-    callbacks                          = ["smtp_email", ]
+    callbacks = ["smtp_email"]
+    # Should solve https://github.com/BerriAI/litellm/issues/14194
+    modify_params                      = true
     route_all_chat_openai_to_responses = true # Recommended
     mcp_semantic_tool_filter = {
       enabled              = true
