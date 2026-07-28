@@ -125,6 +125,7 @@ locals {
     # AWS_REGION. Set both for compatibility.
     { name = "AWS_REGION", value = var.region },
     { name = "AWS_REGION_NAME", value = var.region },
+    { name = "BEDROCK_ROLE_ARN", value = aws_iam_role.litellm_bedrock_role.arn },
   ]
 
   shared_secrets = concat(
