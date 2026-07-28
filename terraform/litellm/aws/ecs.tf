@@ -76,37 +76,56 @@ locals {
     { name = "OTEL_HEADERS", valueFrom = var.otel_headers_secret_arn },
   ] : []
 
-  shared_env = concat(
-    [
-      { name = "IAM_TOKEN_DB_AUTH", value = "true" },
-      { name = "DATABASE_HOST", value = aws_rds_cluster.this.endpoint },
-      { name = "DATABASE_PORT", value = tostring(aws_rds_cluster.this.port) },
-      { name = "DATABASE_USER", value = var.db_username },
-      { name = "DATABASE_NAME", value = var.db_name },
-    ],
-    var.db_enable_reader ? [
-      { name = "DATABASE_HOST_READ_REPLICA", value = aws_rds_cluster.this.reader_endpoint },
-      { name = "DATABASE_PORT_READ_REPLICA", value = tostring(aws_rds_cluster.this.port) },
+  # Enterprise request metering, gated on billing_metrics_endpoint. The
+  # endpoint rides in as a plain env var; the mTLS material is stored in
+  # Secrets Manager (secrets.tf) and injected as PEM-valued env vars, which
+  # the proxy accepts in place of file paths. Each PEM is wired only when the
+  # operator supplied it, so an empty ca_cert_pem falls back to the system
+  # trust store.
+  billing_metrics_enabled             = var.billing_metrics_endpoint != ""
+  billing_metrics_client_cert_enabled = local.billing_metrics_enabled && var.billing_metrics_client_cert_pem != ""
+  billing_metrics_client_key_enabled  = local.billing_metrics_enabled && var.billing_metrics_client_key_pem != ""
+  billing_metrics_ca_cert_enabled     = local.billing_metrics_enabled && var.billing_metrics_ca_cert_pem != ""
+
+  billing_metrics_env = local.billing_metrics_enabled ? [
+    { name = "LITELLM_BILLING_METRICS_ENDPOINT", value = var.billing_metrics_endpoint },
+  ] : []
+
+  billing_metrics_secrets = concat(
+    local.billing_metrics_client_cert_enabled ? [
+      { name = "LITELLM_BILLING_METRICS_CLIENT_CERT", valueFrom = aws_secretsmanager_secret.billing_metrics_client_cert[0].arn },
     ] : [],
-    [
-      { name = "REDIS_HOST", value = aws_elasticache_replication_group.this.primary_endpoint_address },
-      { name = "REDIS_PORT", value = tostring(aws_elasticache_replication_group.this.port) },
-      # transit_encryption_enabled = true on the replication group means the
-      # proxy must connect via rediss://. _redis.get_redis_url_from_environment
-      # honors REDIS_SSL to flip the scheme.
-      { name = "REDIS_SSL", value = "true" },
-      # S3 bucket — referenced from proxy_config via os.environ/S3_BUCKET_NAME
-      # (e.g. cache backend, request log archival, /files passthrough).
-      { name = "S3_BUCKET_NAME", value = aws_s3_bucket.this.bucket },
-      { name = "S3_REGION_NAME", value = var.region },
-      # Automatic injection of BEDROCK_ROLE_ARN as per documentation
-      { name = "BEDROCK_ROLE_ARN", value = aws_iam_role.litellm_bedrock_role.arn },
-      # boto3 inside generate_iam_auth_token reads AWS_REGION_NAME first, then
-      # AWS_REGION. Set both for compatibility.
-      { name = "AWS_REGION", value = var.region },
-      { name = "AWS_REGION_NAME", value = var.region },
-    ],
+    local.billing_metrics_client_key_enabled ? [
+      { name = "LITELLM_BILLING_METRICS_CLIENT_KEY", valueFrom = aws_secretsmanager_secret.billing_metrics_client_key[0].arn },
+    ] : [],
+    local.billing_metrics_ca_cert_enabled ? [
+      { name = "LITELLM_BILLING_METRICS_CA_CERT", valueFrom = aws_secretsmanager_secret.billing_metrics_ca_cert[0].arn },
+    ] : [],
   )
+
+  shared_env = [
+    { name = "IAM_TOKEN_DB_AUTH", value = "true" },
+    { name = "DATABASE_HOST", value = aws_rds_cluster.this.endpoint },
+    { name = "DATABASE_PORT", value = tostring(aws_rds_cluster.this.port) },
+    { name = "DATABASE_USER", value = var.db_username },
+    { name = "DATABASE_NAME", value = var.db_name },
+    { name = "DATABASE_HOST_READ_REPLICA", value = aws_rds_cluster.this.reader_endpoint },
+    { name = "DATABASE_PORT_READ_REPLICA", value = tostring(aws_rds_cluster.this.port) },
+    { name = "REDIS_HOST", value = aws_elasticache_replication_group.this.primary_endpoint_address },
+    { name = "REDIS_PORT", value = tostring(aws_elasticache_replication_group.this.port) },
+    # transit_encryption_enabled = true on the replication group means the
+    # proxy must connect via rediss://. _redis.get_redis_url_from_environment
+    # honors REDIS_SSL to flip the scheme.
+    { name = "REDIS_SSL", value = "true" },
+    # S3 bucket — referenced from proxy_config via os.environ/S3_BUCKET_NAME
+    # (e.g. cache backend, request log archival, /files passthrough).
+    { name = "S3_BUCKET_NAME", value = aws_s3_bucket.this.bucket },
+    { name = "S3_REGION_NAME", value = var.region },
+    # boto3 inside generate_iam_auth_token reads AWS_REGION_NAME first, then
+    # AWS_REGION. Set both for compatibility.
+    { name = "AWS_REGION", value = var.region },
+    { name = "AWS_REGION_NAME", value = var.region },
+  ]
 
   shared_secrets = concat(
     [
@@ -116,6 +135,7 @@ locals {
       { name = "LITELLM_LICENSE", valueFrom = aws_secretsmanager_secret.license[0].arn },
     ],
     local.otel_secrets,
+    local.billing_metrics_secrets,
   )
 
   # Backend-only managed secrets. UI_PASSWORD is consumed by the management
@@ -213,6 +233,30 @@ locals {
 
 # ---------- Gateway ----------
 resource "aws_ecs_task_definition" "gateway" {
+  # Metering needs a client certificate AND its key. Each secret is created only
+  # when its own PEM is supplied, so an endpoint set with a missing key would
+  # otherwise apply cleanly and leave the proxy logging "missing config" and
+  # never exporting. ca_cert_pem stays optional: empty means fall back to the
+  # system trust store.
+  #
+  # The guard lives here, on an unconditional resource, rather than on the cert
+  # secret: that secret is count-gated on the cert itself, so it has zero
+  # instances in exactly the case this must catch. Adding count or for_each to
+  # this resource would silently stop the guard from evaluating.
+  #
+  #   endpoint  cert  key  -> result
+  #   ""        any   any  -> metering off, no secrets created
+  #   set       set   set  -> metering on
+  #   set       any-missing -> plan fails here
+  lifecycle {
+    precondition {
+      condition = var.billing_metrics_endpoint == "" || (
+        var.billing_metrics_client_cert_pem != "" && var.billing_metrics_client_key_pem != ""
+      )
+      error_message = "billing_metrics_client_cert_pem and billing_metrics_client_key_pem are both required when billing_metrics_endpoint is set."
+    }
+  }
+
   family                   = "${local.name}-gateway"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
@@ -232,6 +276,7 @@ resource "aws_ecs_task_definition" "gateway" {
         environment = concat(
           local.shared_env,
           local.gateway_otel_env,
+          local.billing_metrics_env,
           local.gateway_extra_env_list,
           local.proxy_config_env,
         )
@@ -298,6 +343,18 @@ resource "aws_ecs_service" "gateway" {
 
 # ---------- Backend ----------
 resource "aws_ecs_task_definition" "backend" {
+  # Same guard as the gateway: the backend meters too (it serves the named-server
+  # MCP transport), and a targeted apply of just this resource must not slip a
+  # billing endpoint through without the credentials to use it.
+  lifecycle {
+    precondition {
+      condition = var.billing_metrics_endpoint == "" || (
+        var.billing_metrics_client_cert_pem != "" && var.billing_metrics_client_key_pem != ""
+      )
+      error_message = "billing_metrics_client_cert_pem and billing_metrics_client_key_pem are both required when billing_metrics_endpoint is set."
+    }
+  }
+
   family                   = "${local.name}-backend"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
@@ -318,6 +375,7 @@ resource "aws_ecs_task_definition" "backend" {
           local.shared_env,
           local.backend_default_env,
           local.backend_otel_env,
+          local.billing_metrics_env,
           local.backend_extra_env_list,
           local.proxy_config_env,
         )

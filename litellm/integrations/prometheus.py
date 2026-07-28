@@ -16,6 +16,7 @@ from typing import (
     Dict,
     List,
     Literal,
+    Mapping,
     Optional,
     Sequence,
     Tuple,
@@ -237,6 +238,18 @@ class PrometheusLogger(CustomLogger):
                 "litellm_output_audio_tokens_metric",
                 "Audio output tokens reported in completion_tokens_details.audio_tokens",
                 labelnames=self.get_labels_for_metric("litellm_output_audio_tokens_metric"),
+            )
+
+            self.litellm_video_duration_seconds_metric = self._counter_factory(
+                "litellm_video_duration_seconds_metric",
+                "Seconds of video generated, from usage.duration_seconds on video generation calls",
+                labelnames=self.get_labels_for_metric("litellm_video_duration_seconds_metric"),
+            )
+
+            self.litellm_images_generated_metric = self._counter_factory(
+                "litellm_images_generated_metric",
+                "Number of images generated, from the image generation response",
+                labelnames=self.get_labels_for_metric("litellm_images_generated_metric"),
             )
 
             # Remaining Budget for Team
@@ -1336,6 +1349,12 @@ class PrometheusLogger(CustomLogger):
             label_context=label_context,
         )
 
+        self._increment_media_generation_metrics(
+            standard_logging_payload=standard_logging_payload,
+            enum_values=enum_values,
+            label_context=label_context,
+        )
+
         # MCP tool call metrics
         self._increment_mcp_tool_call_metrics(
             standard_logging_payload=standard_logging_payload,
@@ -1431,6 +1450,8 @@ class PrometheusLogger(CustomLogger):
         prompt_details = usage_object.get("prompt_tokens_details") or {}
         completion_details = usage_object.get("completion_tokens_details") or {}
 
+        cache_creation_detail_tokens = PrometheusLogger._resolve_cache_write_tokens(prompt_details)
+
         detail_metrics: List[Tuple[Any, DEFINED_PROMETHEUS_METRICS, Any]] = [
             (
                 self.litellm_input_cached_tokens_metric,
@@ -1440,7 +1461,7 @@ class PrometheusLogger(CustomLogger):
             (
                 self.litellm_input_cache_creation_tokens_metric,
                 "litellm_input_cache_creation_tokens_metric",
-                (prompt_details.get("cache_creation_tokens") if isinstance(prompt_details, dict) else None),
+                cache_creation_detail_tokens,
             ),
             (
                 self.litellm_input_audio_tokens_metric,
@@ -1459,8 +1480,65 @@ class PrometheusLogger(CustomLogger):
             ),
         ]
 
-        for counter, metric_name, value in detail_metrics:
-            if not isinstance(value, (int, float)) or value <= 0:
+        PrometheusLogger._inc_sparse_usage_counters(
+            self,
+            detail_metrics,
+            enum_values=enum_values,
+            label_context=label_context,
+        )
+
+    def _increment_media_generation_metrics(
+        self,
+        standard_logging_payload: StandardLoggingPayload,
+        enum_values: UserAPIKeyLabelValues,
+        label_context: PrometheusLabelFactoryContext | None = None,
+    ) -> None:
+        """
+        Increment video-seconds and images-generated counters from
+        ``standard_logging_payload["metadata"]["usage_object"]``. Video
+        providers report ``duration_seconds`` there; image generation calls
+        report ``output_image_count``. Both are sparse: only emitted when the
+        value is present and > 0, so token-only call types are unaffected.
+        """
+        metadata = standard_logging_payload.get("metadata") or {}
+        usage_object = metadata.get("usage_object") if isinstance(metadata, dict) else None
+        if not isinstance(usage_object, dict):
+            return
+
+        media_metrics: list[tuple[Any, DEFINED_PROMETHEUS_METRICS, Any]] = [
+            (
+                self.litellm_video_duration_seconds_metric,
+                "litellm_video_duration_seconds_metric",
+                usage_object.get("duration_seconds"),
+            ),
+            (
+                self.litellm_images_generated_metric,
+                "litellm_images_generated_metric",
+                usage_object.get("output_image_count"),
+            ),
+        ]
+
+        PrometheusLogger._inc_sparse_usage_counters(
+            self,
+            media_metrics,
+            enum_values=enum_values,
+            label_context=label_context,
+        )
+
+    def _inc_sparse_usage_counters(
+        self,
+        counters_with_values: list[tuple[Any, DEFINED_PROMETHEUS_METRICS, Any]],
+        enum_values: UserAPIKeyLabelValues,
+        label_context: PrometheusLabelFactoryContext | None = None,
+    ) -> None:
+        """
+        Increment each ``(counter, metric_name, value)`` entry whose value is
+        a positive number. Non-numeric values (including booleans from
+        malformed provider usage dicts) and values <= 0 are skipped, keeping
+        scrape output sparse.
+        """
+        for counter, metric_name, value in counters_with_values:
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
                 continue
             PrometheusLogger._inc_labeled_counter(
                 self,
@@ -1522,27 +1600,12 @@ class PrometheusLogger(CustomLogger):
             )
 
         # Provider prompt caching metrics are independent of LiteLLM cache_hit.
-        provider_cache_read_tokens = 0
-        provider_cache_creation_tokens = 0
         usage_obj = (standard_logging_payload.get("metadata", {}) or {}).get("usage_object")
         if isinstance(usage_obj, dict):
-            # Prefer explicit provider cache fields when available.
-            _read = usage_obj.get("cache_read_input_tokens")
-            _write = usage_obj.get("cache_creation_input_tokens")
-
-            if isinstance(_read, int):
-                provider_cache_read_tokens = _read
-            if isinstance(_write, int):
-                provider_cache_creation_tokens = _write
-
-            # Fallback to prompt_tokens_details.cached_tokens (common normalization point).
-            # Only fallback when the explicit field is genuinely absent (None).
-            if _read is None:
-                prompt_details = usage_obj.get("prompt_tokens_details")
-                if isinstance(prompt_details, dict):
-                    cached_tokens = prompt_details.get("cached_tokens")
-                    if isinstance(cached_tokens, int):
-                        provider_cache_read_tokens = cached_tokens
+            (
+                provider_cache_read_tokens,
+                provider_cache_creation_tokens,
+            ) = PrometheusLogger._resolve_provider_cache_tokens(usage_obj)
 
             if provider_cache_read_tokens > 0:
                 PrometheusLogger._inc_labeled_counter(
@@ -1563,6 +1626,40 @@ class PrometheusLogger(CustomLogger):
                     label_context=label_context,
                     amount=float(provider_cache_creation_tokens),
                 )
+
+    @staticmethod
+    def _resolve_provider_cache_tokens(usage_obj: Mapping[str, object]) -> tuple[int, int]:
+        # Prefer explicit provider cache fields when available.
+        _read = usage_obj.get("cache_read_input_tokens")
+        _write = usage_obj.get("cache_creation_input_tokens")
+
+        provider_cache_read_tokens = _read if isinstance(_read, int) else 0
+        provider_cache_creation_tokens = _write if isinstance(_write, int) else 0
+
+        # Fallback to prompt_tokens_details (common normalization point).
+        # Only fallback when the explicit field is genuinely absent (None).
+        prompt_details = usage_obj.get("prompt_tokens_details")
+        if _read is None and isinstance(prompt_details, dict):
+            cached_tokens = prompt_details.get("cached_tokens")
+            if isinstance(cached_tokens, int):
+                provider_cache_read_tokens = cached_tokens
+
+        if _write is None:
+            write_tokens = PrometheusLogger._resolve_cache_write_tokens(prompt_details)
+            if write_tokens is not None:
+                provider_cache_creation_tokens = write_tokens
+
+        return provider_cache_read_tokens, provider_cache_creation_tokens
+
+    @staticmethod
+    def _resolve_cache_write_tokens(prompt_details: object) -> int | None:
+        if not isinstance(prompt_details, dict):
+            return None
+        for key in ("cache_write_tokens", "cache_creation_tokens"):
+            value = prompt_details.get(key)
+            if isinstance(value, int) and not isinstance(value, bool):
+                return value
+        return None
 
     def _increment_mcp_tool_call_metrics(
         self,
@@ -1618,6 +1715,14 @@ class PrometheusLogger(CustomLogger):
         user_id: Optional[str] = None,
         user_api_key_org_id: Optional[str] = None,
     ):
+        if (
+            isinstance(self.litellm_remaining_team_budget_metric, NoOpMetric)
+            and isinstance(self.litellm_remaining_api_key_budget_metric, NoOpMetric)
+            and isinstance(self.litellm_remaining_user_budget_metric, NoOpMetric)
+            and isinstance(self.litellm_remaining_org_budget_metric, NoOpMetric)
+        ):
+            return
+
         _metadata = litellm_params.get("metadata") or {}
         _team_spend = _metadata.get("user_api_key_team_spend", None)
         _team_max_budget = _metadata.get("user_api_key_team_max_budget", None)
@@ -1708,6 +1813,35 @@ class PrometheusLogger(CustomLogger):
             amount=float(response_cost),
         )
 
+    @staticmethod
+    def _get_remaining_from_v3_rate_limit_headers(
+        standard_logging_payload: StandardLoggingPayload | None,
+        rate_limit_type: Literal["requests", "tokens"],
+    ) -> int | None:
+        """
+        Read the per-(key, model) remaining value emitted by the v3 rate
+        limiter (``parallel_request_limiter_v3.py``), which writes
+        ``x-ratelimit-model_per_key-remaining-{requests,tokens}`` into
+        ``standard_logging_object.hidden_params.additional_headers`` instead
+        of the ``litellm-key-remaining-*`` metadata keys the legacy limiter
+        sets. The header carries no model group; it always refers to this
+        request's model group, which is what the gauges are labeled with.
+        Values are written in-process as plain ints (never HTTP-serialized
+        strings), so anything else is rejected rather than coerced.
+        """
+        if standard_logging_payload is None:
+            return None
+        hidden_params = standard_logging_payload.get("hidden_params")
+        if hidden_params is None:
+            return None
+        additional_headers = hidden_params.get("additional_headers")
+        if additional_headers is None:
+            return None
+        value = dict(additional_headers).get(f"x-ratelimit-model_per_key-remaining-{rate_limit_type}")
+        if isinstance(value, bool) or not isinstance(value, int):
+            return None
+        return value
+
     def _set_virtual_key_rate_limit_metrics(
         self,
         user_api_key: Optional[str],
@@ -1725,11 +1859,20 @@ class PrometheusLogger(CustomLogger):
         model_group = get_model_group_from_litellm_kwargs(kwargs)
         remaining_requests_variable_name = f"litellm-key-remaining-requests-{model_group}"
         remaining_tokens_variable_name = f"litellm-key-remaining-tokens-{model_group}"
+        standard_logging_payload: StandardLoggingPayload | None = kwargs.get("standard_logging_object")
 
         remaining_requests = metadata.get(remaining_requests_variable_name)
         if remaining_requests is None:
+            remaining_requests = self._get_remaining_from_v3_rate_limit_headers(
+                standard_logging_payload=standard_logging_payload, rate_limit_type="requests"
+            )
+        if remaining_requests is None:
             remaining_requests = sys.maxsize
         remaining_tokens = metadata.get(remaining_tokens_variable_name)
+        if remaining_tokens is None:
+            remaining_tokens = self._get_remaining_from_v3_rate_limit_headers(
+                standard_logging_payload=standard_logging_payload, rate_limit_type="tokens"
+            )
         if remaining_tokens is None:
             remaining_tokens = sys.maxsize
 
@@ -3332,6 +3475,9 @@ class PrometheusLogger(CustomLogger):
             - looks up team info from db if not available in metadata
         - Set team budget metrics
         """
+        if isinstance(self.litellm_remaining_team_budget_metric, NoOpMetric):
+            return
+
         if user_api_team:
             team_object = await self._assemble_team_object(
                 team_id=user_api_team,
@@ -3453,6 +3599,9 @@ class PrometheusLogger(CustomLogger):
         - Fetches org info via cache (get_org_object)
         - Sets org budget metrics
         """
+        if isinstance(self.litellm_remaining_org_budget_metric, NoOpMetric):
+            return
+
         if not org_id:
             return
 
@@ -3582,6 +3731,9 @@ class PrometheusLogger(CustomLogger):
         key_max_budget: Optional[float],
         key_spend: Optional[float],
     ):
+        if isinstance(self.litellm_remaining_api_key_budget_metric, NoOpMetric):
+            return
+
         if user_api_key:
             user_api_key_dict = await self._assemble_key_object(
                 user_api_key=user_api_key,
@@ -3619,6 +3771,7 @@ class PrometheusLogger(CustomLogger):
                     hashed_token=user_api_key_dict.token,
                     prisma_client=prisma_client,
                     user_api_key_cache=user_api_key_cache,
+                    check_cache_only=True,
                 )
                 if key_object:
                     user_api_key_dict.budget_reset_at = key_object.budget_reset_at
@@ -3641,6 +3794,9 @@ class PrometheusLogger(CustomLogger):
             - looks up user info from db if not available in metadata
         - Set user budget metrics
         """
+        if isinstance(self.litellm_remaining_user_budget_metric, NoOpMetric):
+            return
+
         if user_id:
             user_object = await self._assemble_user_object(
                 user_id=user_id,
