@@ -150,6 +150,10 @@ locals {
         aws_role_name    = "os.environ/BEDROCK_ROLE_ARN"
         aws_region_name  = var.region
         aws_session_name = "bedrock-session"
+        thinking = {
+          type          = "enabled"
+          budget_tokens = 1024
+        }
       }
     }
   ]

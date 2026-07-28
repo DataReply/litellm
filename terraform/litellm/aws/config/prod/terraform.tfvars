@@ -60,12 +60,96 @@ proxy_config = {
         complexity_router_config = {
           tiers = {
             SIMPLE    = "gpt-5.4-mini"
-            MEDIUM    = "gpt-5.4"
+            MEDIUM    = "bedrock-anthropic-sonnet-5"
             COMPLEX   = "gpt-5.5"
-            REASONING = "gpt-5.5"
+            REASONING = "bedrock-anthropic-opus-4.8"
           }
         }
-        complexity_router_default_model = "gpt-5.4-mini"
+        complexity_router_default_model = "bedrock-anthropic-sonnet-5"
+      }
+    },
+    {
+      model_name = "smart-router-technical"
+      litellm_params = {
+        model = "auto_router/complexity_router"
+        complexity_router_config = {
+          tiers = {
+            SIMPLE    = "gpt-5.4-mini"
+            MEDIUM    = "bedrock-anthropic-sonnet-5"
+            COMPLEX   = "gpt-5.5"
+            REASONING = "bedrock-anthropic-opus-4.8"
+          }
+        }
+        complexity_router_default_model = "bedrock-anthropic-sonnet-5"
+      }
+    },
+    {
+      model_name = "smart-router-rfp"
+      litellm_params = {
+        model = "auto_router/complexity_router"
+        complexity_router_config = {
+          tiers = {
+            SIMPLE    = "gpt-5.4-mini"
+            MEDIUM    = "bedrock-anthropic-sonnet-5"
+            COMPLEX   = "bedrock-anthropic-opus-4.8"
+            REASONING = "bedrock-anthropic-fable-5"
+          }
+          dimension_weights = {
+            tokenCount         = 0.16
+            codePresence       = 0.10
+            reasoningMarkers   = 0.24
+            technicalTerms     = 0.32
+            simpleIndicators   = 0.10
+            multiStepPatterns  = 0.05
+            questionComplexity = 0.03
+          }
+          token_thresholds = {
+            simple  = 20
+            complex = 220
+          }
+          technical_keywords = [
+            "proposal",
+            "rfp",
+            "requirements",
+            "scope",
+            "deliverables",
+            "milestones",
+            "timeline",
+            "procurement",
+            "commercial",
+            "pricing",
+            "compliance",
+            "security",
+            "governance",
+            "architecture",
+            "implementation",
+            "sla"
+          ]
+          reasoning_keywords = [
+            "analyze",
+            "evaluate",
+            "compare",
+            "tradeoff",
+            "recommend",
+            "justify",
+            "redraft",
+            "rewrite",
+            "improve",
+            "structure",
+            "step by step",
+            "think through"
+          ]
+          simple_keywords = [
+            "summarize",
+            "rewrite briefly",
+            "short email",
+            "brief",
+            "quick",
+            "hello",
+            "thanks"
+          ]
+        }
+        complexity_router_default_model = "bedrock-anthropic-sonnet-5"
       }
     },
     {
@@ -149,6 +233,18 @@ bedrock_models = [
     model_name = "bedrock-anthropic-haiku-4.5"
     model      = "bedrock/eu.anthropic.claude-haiku-4-5-20251001-v1:0"
     model_id   = "arn:aws:bedrock:eu-central-1:751812493785:inference-profile/eu.anthropic.claude-haiku-4-5-20251001-v1:0"
+  },
+  {
+    model_name = "bedrock-anthropic-sonnet-5"
+    model      = "bedrock/eu.anthropic.claude-sonnet-5"
+  },
+  {
+    model_name = "bedrock-anthropic-opus-4.8"
+    model      = "bedrock/eu.anthropic.claude-opus-4-8"
+  },
+  {
+    model_name = "bedrock-anthropic-fable-5"
+    model      = "bedrock/eu.anthropic.claude-fable-5"
   }
 ]
 
