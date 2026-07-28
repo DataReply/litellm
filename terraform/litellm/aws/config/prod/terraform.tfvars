@@ -92,7 +92,7 @@ proxy_config = {
             SIMPLE    = "gpt-5.4-mini"
             MEDIUM    = "bedrock-anthropic-sonnet-5"
             COMPLEX   = "bedrock-anthropic-opus-4.8"
-            REASONING = "bedrock-anthropic-fable-5"
+            REASONING = "bedrock-anthropic-opus-4.8"
           }
           dimension_weights = {
             tokenCount         = 0.16
@@ -241,10 +241,6 @@ bedrock_models = [
   {
     model_name = "bedrock-anthropic-opus-4.8"
     model      = "bedrock/eu.anthropic.claude-opus-4-8"
-  },
-  {
-    model_name = "bedrock-anthropic-fable-5"
-    model      = "bedrock/eu.anthropic.claude-fable-5"
   }
 ]
 
