@@ -65,7 +65,7 @@ proxy_config = {
             REASONING = "bedrock-anthropic-opus-4.8"
           }
         }
-        complexity_router_default_model = "bedrock-anthropic-sonnet-5"
+        complexity_router_default_model = "gpt-5.4-mini"
       }
     },
     {
@@ -80,7 +80,7 @@ proxy_config = {
             REASONING = "bedrock-anthropic-opus-4.8"
           }
         }
-        complexity_router_default_model = "bedrock-anthropic-sonnet-5"
+        complexity_router_default_model = "gpt-5.4-mini"
       }
     },
     {
@@ -149,7 +149,7 @@ proxy_config = {
             "thanks"
           ]
         }
-        complexity_router_default_model = "bedrock-anthropic-sonnet-5"
+        complexity_router_default_model = "gpt-5.4-mini"
       }
     },
     {
