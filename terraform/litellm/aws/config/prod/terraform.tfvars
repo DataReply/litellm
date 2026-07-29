@@ -213,15 +213,15 @@ proxy_config = {
       favicon_url = "https://www.reply.com/favicon.ico"
     }
   },
-  mcp_servers = {
-    data_reply_sharepoint_server = {
-      url           = ""
-      transport     = "http"
-      auth_type     = "oauth2"
-      client_id     = "os.environ/SHAREPOINT_OAUTH_CREDENTIALS_CLIENT_ID"
-      client_secret = "os.environ/SHAREPOINT_OAUTH_CREDENTIALS_CLIENT_SECRET"
-    }
-  },
+  # mcp_servers = {
+  #   data_reply_sharepoint_server = {
+  #     url           = ""
+  #     transport     = "http"
+  #     auth_type     = "oauth2"
+  #     client_id     = "os.environ/SHAREPOINT_OAUTH_CREDENTIALS_CLIENT_ID"
+  #     client_secret = "os.environ/SHAREPOINT_OAUTH_CREDENTIALS_CLIENT_SECRET"
+  #   }
+  # },
 }
 
 bedrock_models = [
