@@ -19,6 +19,27 @@ db_serverless_max_capacity     = 8
 proxy_config = {
   model_list = [
     {
+      model_name = "gpt-5.6-terra"
+      litellm_params = {
+        model   = "openai/gpt-5.6-terra"
+        api_key = "os.environ/OPENAI_API_KEY"
+      }
+    },
+    {
+      model_name = "gpt-5.6-luna"
+      litellm_params = {
+        model   = "openai/gpt-5.6-luna"
+        api_key = "os.environ/OPENAI_API_KEY"
+      }
+    },
+    {
+      model_name = "gpt-5.6-sol"
+      litellm_params = {
+        model   = "openai/gpt-5.6-sol"
+        api_key = "os.environ/OPENAI_API_KEY"
+      }
+    },
+    {
       model_name = "gpt-5.5"
       litellm_params = {
         model   = "openai/gpt-5.5"
@@ -61,7 +82,7 @@ proxy_config = {
           tiers = {
             SIMPLE    = "gpt-5.4-mini"
             MEDIUM    = "bedrock-anthropic-sonnet-5"
-            COMPLEX   = "gpt-5.5"
+            COMPLEX   = "gpt-5.6-sol"
             REASONING = "bedrock-anthropic-opus-4.8"
           }
         }
@@ -76,7 +97,7 @@ proxy_config = {
           tiers = {
             SIMPLE    = "gpt-5.4-mini"
             MEDIUM    = "bedrock-anthropic-sonnet-5"
-            COMPLEX   = "gpt-5.5"
+            COMPLEX   = "gpt-5.6-sol"
             REASONING = "bedrock-anthropic-opus-4.8"
           }
         }
