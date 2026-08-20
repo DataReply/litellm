@@ -273,8 +273,6 @@ resource "aws_ecs_task_definition" "gateway" {
         image     = var.gateway_image
         essential = true
 
-        dependsOn = [{ containerName = "headroom", condition = "HEALTHY" }]
-
         portMappings = [{ containerPort = 4000, protocol = "tcp" }]
         environment = concat(
           local.shared_env,
@@ -299,37 +297,7 @@ resource "aws_ecs_task_definition" "gateway" {
         }
       },
       local.gateway_proxy_overrides,
-    ),
-    {
-      name      = "headroom"
-      image     = "ghcr.io/headroomlabs-ai/headroom@sha256:6b34905489e3a5e4458cd95d2db2b1ac84fba64429c06fc653eb31e59376b079"
-      essential = true
-
-      command = ["--host", "127.0.0.1", "--port", "8787", "--workers", "1"]
-
-      environment = [
-        { name = "HEADROOM_LOSSLESS", value = "true" },
-        { name = "HEADROOM_STATELESS", value = "true" },
-        { name = "HEADROOM_TELEMETRY", value = "off" },
-      ]
-
-      healthCheck = {
-        command     = ["CMD", "python3", "-c", "from urllib.request import urlopen; urlopen('http://127.0.0.1:8787/readyz', timeout=3)"]
-        interval    = 30
-        retries     = 3
-        startPeriod = 120
-        timeout     = 5
-      }
-
-      logConfiguration = {
-        logDriver = "awslogs"
-        options = {
-          awslogs-group         = aws_cloudwatch_log_group.gateway.name
-          awslogs-region        = var.region
-          awslogs-stream-prefix = "headroom"
-        }
-      }
-    },
+    )
   ])
 
   tags = local.tags

@@ -217,20 +217,8 @@ proxy_config = {
       log_to_console               = false
     }
   },
-  guardrails = [
-    {
-      guardrail_name = "headroom-compression"
-      litellm_params = {
-        guardrail            = "headroom"
-        mode                 = "pre_call"
-        api_base             = "http://127.0.0.1:8787"
-        default_on           = false
-        unreachable_fallback = "fail_open"
-      }
-    }
-  ],
   litellm_settings = {
-    callbacks = ["smtp_email"]
+    callbacks = ["smtp_email", "headroom.integrations.litellm_callback.HeadroomCallback"]
     # Should solve https://github.com/BerriAI/litellm/issues/14194
     modify_params                      = true
     route_all_chat_openai_to_responses = true # Recommended
@@ -302,3 +290,4 @@ gateway_extra_secrets = {
   SLACK_WEBHOOK_URL = "arn:aws:secretsmanager:eu-central-1:751812493785:secret:data-reply/litellm/slack/webhook-reports-vXNOwY"
   OPENAI_API_KEY    = "arn:aws:secretsmanager:eu-central-1:751812493785:secret:data-reply/litellm/openai-api-key-nNpCF1"
 }
+
