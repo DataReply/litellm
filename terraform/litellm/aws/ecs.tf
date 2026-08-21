@@ -302,7 +302,7 @@ resource "aws_ecs_task_definition" "gateway" {
     ),
     {
       name      = "headroom"
-      image     = "ghcr.io/headroomlabs-ai/headroom@sha256:6b34905489e3a5e4458cd95d2db2b1ac84fba64429c06fc653eb31e59376b079"
+      image     = "ghcr.io/headroomlabs-ai/headroom@sha256:6c654cb0268a7699e68172fe3b43fda31a381576870fb2ed1691451a64a1bfe2"
       essential = true
 
       command = ["--host", "127.0.0.1", "--port", "8787", "--workers", "1"]
