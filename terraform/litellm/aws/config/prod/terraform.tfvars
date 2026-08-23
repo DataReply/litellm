@@ -224,7 +224,7 @@ proxy_config = {
         guardrail            = "headroom"
         mode                 = "pre_call"
         api_base             = "http://127.0.0.1:8787"
-        default_on           = false
+        default_on           = true
         unreachable_fallback = "fail_open"
       }
     }
