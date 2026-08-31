@@ -40,13 +40,6 @@ proxy_config = {
       }
     },
     {
-      model_name = "gpt-5.5"
-      litellm_params = {
-        model   = "openai/gpt-5.5"
-        api_key = "os.environ/OPENAI_API_KEY"
-      }
-    },
-    {
       model_name = "gpt-5.4"
       litellm_params = {
         model   = "openai/gpt-5.4"
@@ -68,40 +61,18 @@ proxy_config = {
       }
     },
     {
-      model_name = "gpt-5.2"
-      litellm_params = {
-        model   = "openai/gpt-5.2"
-        api_key = "os.environ/OPENAI_API_KEY"
-      }
-    },
-    {
-      model_name = "smart-router"
-      litellm_params = {
-        model = "auto_router/complexity_router"
-        complexity_router_config = {
-          tiers = {
-            SIMPLE    = "gpt-5.4-mini"
-            MEDIUM    = "bedrock-anthropic-sonnet-5"
-            COMPLEX   = "gpt-5.6-sol"
-            REASONING = "bedrock-anthropic-opus-4.8"
-          }
-        }
-        complexity_router_default_model = "gpt-5.4-mini"
-      }
-    },
-    {
       model_name = "smart-router-technical"
       litellm_params = {
         model = "auto_router/complexity_router"
         complexity_router_config = {
           tiers = {
-            SIMPLE    = "gpt-5.4-mini"
+            SIMPLE    = "gpt-5.6-luna"
             MEDIUM    = "bedrock-anthropic-sonnet-5"
-            COMPLEX   = "gpt-5.6-sol"
-            REASONING = "bedrock-anthropic-opus-4.8"
+            COMPLEX   = "gpt-5.6-terra"
+            REASONING = "gpt-5.6-terra"
           }
         }
-        complexity_router_default_model = "gpt-5.4-mini"
+        complexity_router_default_model = "gpt-5.6-luna"
       }
     },
     {
@@ -112,8 +83,8 @@ proxy_config = {
           tiers = {
             SIMPLE    = "gpt-5.4-mini"
             MEDIUM    = "bedrock-anthropic-sonnet-5"
-            COMPLEX   = "bedrock-anthropic-opus-4.8"
-            REASONING = "bedrock-anthropic-opus-4.8"
+            COMPLEX   = "gpt-5.6-terra"
+            REASONING = "gpt-5.6-terra"
           }
           dimension_weights = {
             tokenCount         = 0.16
@@ -271,10 +242,10 @@ bedrock_models = [
     model_name = "bedrock-anthropic-sonnet-5"
     model      = "bedrock/eu.anthropic.claude-sonnet-5"
   },
-  {
-    model_name = "bedrock-anthropic-opus-4.8"
-    model      = "bedrock/eu.anthropic.claude-opus-4-8"
-  }
+  # {
+  #   model_name = "bedrock-anthropic-opus-4.8"
+  #   model      = "bedrock/eu.anthropic.claude-opus-4-8"
+  # }
 ]
 
 # ---------- Extra env / secrets ----------
