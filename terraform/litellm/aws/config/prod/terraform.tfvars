@@ -14,6 +14,7 @@ db_primary_instance_identifier = "data-reply-litellm-prod-reader"
 db_writer_instance_class       = "db.serverless"
 db_serverless_min_capacity     = 0.5
 db_serverless_max_capacity     = 8
+db_engine_version = "16.11"
 
 # ---------- proxy_config (mirrors helm gateway.config.proxy_config) ----------
 proxy_config = {
