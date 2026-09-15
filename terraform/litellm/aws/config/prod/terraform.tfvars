@@ -20,6 +20,20 @@ db_engine_version = "16.11"
 proxy_config = {
   model_list = [
     {
+      model_name = "gpt-4o-transcribe"
+      litellm_params = {
+        model   = "openai/gpt-4o-transcribe"
+        api_key = "os.environ/OPENAI_API_KEY"
+      }
+    },
+    {
+      model_name = "gpt-4o-mini-transcribe-2025-12-15"
+      litellm_params = {
+        model   = "openai/gpt-4o-mini-transcribe-2025-12-15"
+        api_key = "os.environ/OPENAI_API_KEY"
+      }
+    },
+    {
       model_name = "gpt-transcribe"
       litellm_params = {
         model   = "openai/gpt-transcribe"
