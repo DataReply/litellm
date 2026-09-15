@@ -24,13 +24,15 @@ proxy_config = {
       litellm_params = {
         model   = "openai/gpt-transcribe"
         api_key = "os.environ/OPENAI_API_KEY"
-      },
-      {
+      }
+    },
+    {
       model_name = "gpt-live-transcribe"
       litellm_params = {
         model   = "openai/gpt-live-transcribe"
         api_key = "os.environ/OPENAI_API_KEY"
-      },
+      }
+    },
     {
       model_name = "gpt-5.5"
       litellm_params = {
