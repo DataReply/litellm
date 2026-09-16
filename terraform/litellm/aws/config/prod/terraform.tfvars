@@ -48,13 +48,6 @@ proxy_config = {
       }
     },
     {
-      model_name = "gpt-5.5"
-      litellm_params = {
-        model   = "openai/gpt-5.5"
-        api_key = "os.environ/OPENAI_API_KEY"
-      }
-    },
-    {
       model_name = "gpt-5.6-terra"
       litellm_params = {
         model   = "openai/gpt-5.6-terra"
