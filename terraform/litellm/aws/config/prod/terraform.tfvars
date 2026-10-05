@@ -71,7 +71,7 @@ proxy_config = {
     {
       model_name = "gpt-6-sol"
       litellm_params = {
-        model   = "openai/gpt-6-sol"
+        model   = "openai/gpt-6.1-sol"
         api_key = "os.environ/OPENAI_API_KEY"
       }
     },
