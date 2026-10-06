@@ -348,7 +348,7 @@ from litellm.proxy.auth.auth_checks import (
     log_db_metrics,
 )
 from litellm.proxy.auth.auth_utils import (
-    _has_user_setup_sso,
+    has_user_setup_sso,
     check_response_size_is_safe,
     is_request_body_safe,
     log_once_if_budget_reservation_disabled,
@@ -11051,7 +11051,6 @@ class ProxyStartupEvent:
 
             PrometheusLogger.initialize_budget_metrics_cron_job(scheduler=scheduler)
 
-
         ########################################################
         # User credentials Rotation Background Job
         ########################################################
@@ -11065,7 +11064,7 @@ class ProxyStartupEvent:
         user_credentials_enabled: Optional[bool] = str_to_bool(LITELLM_USER_CREDENTIALS_ROTATION_ENABLED)
         verbose_proxy_logger.debug(f"user_credentials_enabled: {user_credentials_enabled}")
 
-        if user_credentials_enabled is True and not _has_user_setup_sso():
+        if user_credentials_enabled is True and not has_user_setup_sso():
             try:
                 from litellm.proxy.common_utils.user_credentials_rotation_manager import (
                     UserCredentialsRotationManager,
@@ -11077,7 +11076,11 @@ class ProxyStartupEvent:
                         "user_credentials_rotation_reminder_days",
                         LITELLM_USER_CREDENTIALS_ROTATION_REMINDER_DAYS,
                     )
-                    reminder_days = configured_reminder_days if isinstance(configured_reminder_days, int) else LITELLM_USER_CREDENTIALS_ROTATION_REMINDER_DAYS
+                    reminder_days = (
+                        configured_reminder_days
+                        if isinstance(configured_reminder_days, int)
+                        else LITELLM_USER_CREDENTIALS_ROTATION_REMINDER_DAYS
+                    )
                     user_credentials_rotation_manager = UserCredentialsRotationManager(
                         prisma_client,
                         pod_lock_manager=pod_lock_manager,
@@ -11098,7 +11101,6 @@ class ProxyStartupEvent:
                 verbose_proxy_logger.warning(f"Failed to setup user credentials rotation job: {e}")
         else:
             verbose_proxy_logger.debug("User credentials rotation disabled or skipped because SSO is enabled")
-
 
         ########################################################
         # Key Rotation Background Job

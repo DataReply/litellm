@@ -3803,6 +3803,7 @@ class LiteLLM_UserTableFiltered(BaseModel):  # done to avoid exposing sensitive 
     user_id: str
     user_email: str | None = None
 
+
 class LiteLLM_UserTableWithKeyCount(LiteLLM_UserTable):
     key_count: int = 0
 

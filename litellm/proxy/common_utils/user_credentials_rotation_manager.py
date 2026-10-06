@@ -44,9 +44,7 @@ class UserCredentialsRotationManager:
 
             users_to_notify = await self._find_users_needing_reminders()
             if not users_to_notify:
-                verbose_proxy_logger.debug(
-                    "No user credential rotation reminders are due at this time"
-                )
+                verbose_proxy_logger.debug("No user credential rotation reminders are due at this time")
                 return
 
             for user in users_to_notify:
@@ -68,11 +66,7 @@ class UserCredentialsRotationManager:
                 e,
             )
         finally:
-            if (
-                lock_acquired
-                and self.pod_lock_manager
-                and self.pod_lock_manager.redis_cache
-            ):
+            if lock_acquired and self.pod_lock_manager and self.pod_lock_manager.redis_cache:
                 await self.pod_lock_manager.release_lock(
                     cronjob_id=USER_CREDENTIALS_ROTATION_JOB_NAME,
                 )

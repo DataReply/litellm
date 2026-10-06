@@ -433,6 +433,7 @@ def model_info_is_active_for_environment(model_info: Mapping[str, object] | None
         return True
     return False
 
+
 _PreRoutingStrategyT = TypeVar("_PreRoutingStrategyT")
 _CallbackT = TypeVar("_CallbackT")
 

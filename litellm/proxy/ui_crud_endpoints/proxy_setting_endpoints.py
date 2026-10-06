@@ -645,9 +645,7 @@ async def add_allowed_ip(
     if store_model_in_db is not True:
         raise HTTPException(
             status_code=500,
-            detail={
-                "error": "Set `'STORE_MODEL_IN_DB='True'` in your env to enable this feature."
-            },
+            detail={"error": "Set `'STORE_MODEL_IN_DB='True'` in your env to enable this feature."},
         )
 
     # Load existing config
@@ -1037,9 +1035,7 @@ async def _update_litellm_setting(
     if store_model_in_db is not True:
         raise HTTPException(
             status_code=500,
-            detail={
-                "error": "Set `'STORE_MODEL_IN_DB='True'` in your env to enable this feature."
-            },
+            detail={"error": "Set `'STORE_MODEL_IN_DB='True'` in your env to enable this feature."},
         )
 
     in_memory_var: Final = settings.model_dump(mode="json", exclude_none=True)
@@ -1224,9 +1220,7 @@ async def update_sso_settings(
     if store_model_in_db is not True:
         raise HTTPException(
             status_code=500,
-            detail={
-                "error": "Set `'STORE_MODEL_IN_DB='True'` in your env to enable this feature."
-            },
+            detail={"error": "Set `'STORE_MODEL_IN_DB='True'` in your env to enable this feature."},
         )
 
     # Read the existing SSO row first so the audit log captures a real
@@ -1418,9 +1412,7 @@ async def update_ui_theme_settings(
     if store_model_in_db is not True:
         raise HTTPException(
             status_code=500,
-            detail={
-                "error": "Set `'STORE_MODEL_IN_DB='True'` in your env to enable this feature."
-            },
+            detail={"error": "Set `'STORE_MODEL_IN_DB='True'` in your env to enable this feature."},
         )
 
     # Load existing config
@@ -1537,9 +1529,7 @@ async def update_mcp_semantic_filter_settings(
         from litellm.proxy.proxy_server import prisma_client, proxy_config
 
         if prisma_client is not None:
-            await proxy_config._init_semantic_filter_settings_in_db(
-                prisma_client=prisma_client
-            )
+            await proxy_config._init_semantic_filter_settings_in_db(prisma_client=prisma_client)
     except Exception as e:
         verbose_proxy_logger.warning("Failed to reinitialize MCP semantic filter settings immediately: %s", e)
 
@@ -1712,14 +1702,10 @@ async def get_ui_settings_cached() -> dict[str, JsonValue]:
         ui_settings = json.loads(raw) if isinstance(raw, str) else dict(raw)
 
     # Sanitize
-    ui_settings = {
-        k: v for k, v in ui_settings.items() if k in ALLOWED_UI_SETTINGS_FIELDS
-    }
+    ui_settings = {k: v for k, v in ui_settings.items() if k in ALLOWED_UI_SETTINGS_FIELDS}
 
     # 3. Populate cache with TTL
-    await user_api_key_cache.async_set_cache(
-        key=UI_SETTINGS_CACHE_KEY, value=ui_settings, ttl=UI_SETTINGS_CACHE_TTL
-    )
+    await user_api_key_cache.async_set_cache(key=UI_SETTINGS_CACHE_KEY, value=ui_settings, ttl=UI_SETTINGS_CACHE_TTL)
 
     return ui_settings
 
@@ -1793,9 +1779,7 @@ async def get_ui_settings():
 
     # Sync runtime flags into general_settings so the proxy picks them up
     # at runtime (covers server restart scenarios).
-    _flags_to_sync = {
-        k: ui_settings[k] for k in _RUNTIME_GENERAL_SETTINGS_FLAGS if k in ui_settings
-    }
+    _flags_to_sync = {k: ui_settings[k] for k in _RUNTIME_GENERAL_SETTINGS_FLAGS if k in ui_settings}
     if _flags_to_sync:
         from litellm.proxy.proxy_server import general_settings
 
@@ -1806,9 +1790,7 @@ async def get_ui_settings():
     # Refresh DualCache so other code paths (e.g. /user/filter/ui) see fresh values
     from litellm.proxy.proxy_server import user_api_key_cache
 
-    await user_api_key_cache.async_set_cache(
-        key=UI_SETTINGS_CACHE_KEY, value=ui_settings, ttl=UI_SETTINGS_CACHE_TTL
-    )
+    await user_api_key_cache.async_set_cache(key=UI_SETTINGS_CACHE_KEY, value=ui_settings, ttl=UI_SETTINGS_CACHE_TTL)
 
     effective_ui_settings: Final[Mapping[str, object]] = MappingProxyType(
         {
@@ -1873,9 +1855,7 @@ async def update_ui_settings(
     )
 
     if user_api_key_dict.user_role != LitellmUserRoles.PROXY_ADMIN:
-        raise HTTPException(
-            status_code=403, detail="Only proxy admins can update UI settings."
-        )
+        raise HTTPException(status_code=403, detail="Only proxy admins can update UI settings.")
 
     if prisma_client is None:
         raise HTTPException(
@@ -1886,9 +1866,7 @@ async def update_ui_settings(
     if store_model_in_db is not True:
         raise HTTPException(
             status_code=500,
-            detail={
-                "error": "Set `'STORE_MODEL_IN_DB='True'` in your env to enable this feature."
-            },
+            detail={"error": "Set `'STORE_MODEL_IN_DB='True'` in your env to enable this feature."},
         )
 
     conflicting_keys: Final = sorted(
@@ -1932,10 +1910,7 @@ async def update_ui_settings(
 
     # Reject enterprise-only settings up front so the caller gets a clear
     # signal instead of a silent drop.
-    blocked_enterprise_keys = sorted(
-        (settings_dict.keys() & _ENTERPRISE_ONLY_UI_SETTINGS)
-        - ALLOWED_UI_SETTINGS_FIELDS
-    )
+    blocked_enterprise_keys = sorted((settings_dict.keys() & _ENTERPRISE_ONLY_UI_SETTINGS) - ALLOWED_UI_SETTINGS_FIELDS)
     if blocked_enterprise_keys:
         raise HTTPException(
             status_code=403,
@@ -1977,9 +1952,7 @@ async def update_ui_settings(
 
     # Sync runtime flags to general_settings so the proxy picks them up
     # at runtime (general_settings is checked in pre-call utils).
-    _flags_to_sync = {
-        k: ui_settings[k] for k in _RUNTIME_GENERAL_SETTINGS_FLAGS if k in ui_settings
-    }
+    _flags_to_sync = {k: ui_settings[k] for k in _RUNTIME_GENERAL_SETTINGS_FLAGS if k in ui_settings}
     if _flags_to_sync:
         from litellm.proxy.proxy_server import general_settings
 

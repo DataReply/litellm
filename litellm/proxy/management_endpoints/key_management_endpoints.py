@@ -2940,7 +2940,7 @@ async def _process_single_key_update(
         existing_key_row=existing_key_row,
         user_api_key_dict=user_api_key_dict,
         prisma_client=prisma_client,
-        llm_router=llm_router
+        llm_router=llm_router,
     )
 
     await _enforce_custom_key_policy(
@@ -3602,7 +3602,7 @@ async def update_key_fn(
             existing_key_row=existing_key_row,
             user_api_key_dict=user_api_key_dict,
             prisma_client=prisma_client,
-            llm_router=llm_router
+            llm_router=llm_router,
         )
 
         # Only validate key_alias format if it's actually being changed
@@ -5723,7 +5723,7 @@ async def _execute_virtual_key_regeneration(
             existing_key_row=key_in_db,
             user_api_key_dict=user_api_key_dict,
             prisma_client=prisma_client,
-            llm_router=llm_router
+            llm_router=llm_router,
         )
         # Only validate key_alias format if it's actually being changed
         new_key_alias: Final = non_default_values.get("key_alias")
