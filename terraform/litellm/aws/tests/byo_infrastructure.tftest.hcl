@@ -266,7 +266,15 @@ run "no_database_and_no_redis_drops_the_schema_migration" {
   }
 
   assert {
-    condition     = length(local.shared_env) == 4
-    error_message = "The shared env must narrow to the S3 bucket and region pair when both data stores are gone."
+    condition = alltrue([
+      length([for e in local.shared_env : e if e.name == "S3_BUCKET_NAME"]) == 1,
+      length([for e in local.shared_env : e if e.name == "S3_REGION_NAME"]) == 1,
+      length([for e in local.shared_env : e if e.name == "AWS_REGION"]) == 1,
+      length([for e in local.shared_env : e if e.name == "AWS_REGION_NAME"]) == 1,
+      length([for e in local.shared_env : e if e.name == "BEDROCK_ROLE_ARN"]) == 1,
+      length([for e in local.shared_env : e if startswith(e.name, "DATABASE_")]) == 0,
+      length([for e in local.shared_env : e if startswith(e.name, "REDIS_")]) == 0,
+    ])
+    error_message = "The shared env must narrow to the S3 bucket and region pair plus BEDROCK_ROLE_ARN when both data stores (db + redis) are gone."
   }
 }
