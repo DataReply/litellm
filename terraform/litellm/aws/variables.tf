@@ -761,11 +761,11 @@ variable "bedrock_models" {
     condition = alltrue([
       for model in var.bedrock_models :
       (
-      startswith(model.model, "bedrock/") ||
-      startswith(model.model, "arn:aws:bedrock:")
+        startswith(model.model, "bedrock/") ||
+        startswith(model.model, "arn:aws:bedrock:")
       )
     ])
-    error_message = "Every bedrock_models[*].model must start with either \"bedrock/\" or \"arn:aws:bedrock:\"."
+    error_message = "Every bedrock_models[*].model must start with either 'bedrock/' or 'arn:aws:bedrock:'."
   }
 
   validation {
@@ -773,7 +773,7 @@ variable "bedrock_models" {
       for model in var.bedrock_models :
       try(model.model_id == null || startswith(model.model_id, "arn:aws:bedrock:"), true)
     ])
-    error_message = "Every bedrock_models[*].model_id must start with \"arn:aws:bedrock:\" when set."
+    error_message = "Every bedrock_models[*].model_id must start with 'arn:aws:bedrock:' when set."
   }
 }
 

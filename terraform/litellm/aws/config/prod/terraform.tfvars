@@ -14,7 +14,7 @@ db_primary_instance_identifier = "data-reply-litellm-prod-reader"
 db_writer_instance_class       = "db.serverless"
 db_serverless_min_capacity     = 0.5
 db_serverless_max_capacity     = 8
-db_engine_version = "16.11"
+db_engine_version              = "16.11"
 
 # ---------- proxy_config (mirrors helm gateway.config.proxy_config) ----------
 proxy_config = {
@@ -272,19 +272,19 @@ proxy_config = {
 }
 
 bedrock_models = [
-  {
-    model_name = "bedrock-zai-glm-4-7-flash"
-    model      = "bedrock/zai.glm-4.7-flash"
-  },
-  {
-    model_name = "bedrock-anthropic-haiku-4.5"
-    model      = "bedrock/eu.anthropic.claude-haiku-4-5-20251001-v1:0"
-    model_id   = "arn:aws:bedrock:eu-central-1:751812493785:inference-profile/eu.anthropic.claude-haiku-4-5-20251001-v1:0"
-  },
-  {
-    model_name = "bedrock-anthropic-sonnet-5"
-    model      = "bedrock/eu.anthropic.claude-sonnet-5"
-  },
+  # {
+  #   model_name = "bedrock-zai-glm-4-7-flash"
+  #   model      = "bedrock/zai.glm-4.7-flash"
+  # },
+  # {
+  #   model_name = "bedrock-anthropic-haiku-4.5"
+  #   model      = "bedrock/eu.anthropic.claude-haiku-4-5-20251001-v1:0"
+  #   model_id   = "arn:aws:bedrock:eu-central-1:751812493785:inference-profile/eu.anthropic.claude-haiku-4-5-20251001-v1:0"
+  # },
+  # {
+  #   model_name = "bedrock-anthropic-sonnet-5"
+  #   model      = "bedrock/eu.anthropic.claude-sonnet-5"
+  # },
   # {
   #   model_name = "bedrock-anthropic-opus-4.8"
   #   model      = "bedrock/eu.anthropic.claude-opus-4-8"
