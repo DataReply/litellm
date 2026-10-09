@@ -288,7 +288,12 @@ bedrock_models = [
   # {
   #   model_name = "bedrock-anthropic-opus-4.8"
   #   model      = "bedrock/eu.anthropic.claude-opus-4-8"
-  # }
+  # },
+  {
+    model_name = "bedrock-anthropic-sonnet-5.5"
+    model      = "bedrock/eu.anthropic.claude-sonnet-5-5"
+    model_id   = "arn:aws:bedrock:eu-central-1:751812493785:inference-profile/eu.anthropic.claude-sonnet-5-5"
+  }
 ]
 
 # ---------- Extra env / secrets ----------
