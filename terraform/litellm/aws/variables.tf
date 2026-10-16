@@ -139,6 +139,12 @@ variable "azs" {
 # GHCR. Override on a per-component basis in tfvars when bumping; bump them
 # together when bumping the LiteLLM release.
 
+variable "ecr_force_delete" {
+  description = "Allow deletion of ECR repositories containing images."
+  type        = bool
+  default     = false
+}
+
 variable "gateway_image" {
   description = "Container image for the gateway (data plane, port 4000). Tag must match a tag actually published to GHCR — the split images use the `v`-prefixed semver convention."
   type        = string
@@ -596,6 +602,12 @@ variable "allow_plaintext_alb" {
 
 variable "skip_final_snapshot" {
   description = "Skip the Aurora final snapshot on `terraform destroy`. Default false — destroying the cluster takes a snapshot first so data is recoverable. Set true only for ephemeral / CI environments where you accept permanent data loss on destroy."
+  type        = bool
+  default     = false
+}
+
+variable "db_randomize_final_snapshot_name" {
+  description = "Use a random final snapshot suffix, retained in state until destroy and regenerated on recreation."
   type        = bool
   default     = false
 }

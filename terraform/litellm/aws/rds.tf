@@ -42,6 +42,11 @@ locals {
   db_reader_instance_class       = coalesce(var.db_reader_instance_class, var.db_instance_class)
 }
 
+resource "random_id" "final_snapshot" {
+  count       = var.create_database && !var.skip_final_snapshot && var.db_randomize_final_snapshot_name ? 1 : 0
+  byte_length = 8
+}
+
 resource "aws_rds_cluster" "this" {
   count                           = var.create_database ? 1 : 0
   cluster_identifier              = local.name
@@ -73,12 +78,12 @@ resource "aws_rds_cluster" "this" {
     }
   }
 
-  # Final-snapshot guard. With the safe default (skip_final_snapshot = false),
-  # `terraform destroy` takes a snapshot named `<cluster>-final-<short-sha>`
-  # before dropping the cluster. The short SHA disambiguates repeated
-  # destroy/recreate cycles so each snapshot has a unique name.
-  skip_final_snapshot       = var.skip_final_snapshot
-  final_snapshot_identifier = var.skip_final_snapshot ? null : "${local.name}-final-${substr(md5(local.name), 0, 8)}"
+  skip_final_snapshot = var.skip_final_snapshot
+  final_snapshot_identifier = var.skip_final_snapshot ? null : format(
+    "%s-final-%s",
+    local.name,
+    var.db_randomize_final_snapshot_name ? random_id.final_snapshot[0].hex : substr(md5(local.name), 0, 8),
+  )
 
   backup_retention_period = 7
   preferred_backup_window = "07:00-09:00"
