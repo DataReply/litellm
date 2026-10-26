@@ -38,6 +38,10 @@ module "litellm" {
   litellm_license    = var.litellm_license
   ui_password        = var.ui_password
 
+  image_registry = var.image_registry
+  image_tag      = var.image_tag != "" ? var.image_tag : null
+
+  acm_certificate_arn = var.acm_certificate_arn
   acm_certificate_domain_name = var.acm_certificate_domain_name
   route53_zone_id             = var.route53_zone_id
   allow_plaintext_alb         = var.allow_plaintext_alb

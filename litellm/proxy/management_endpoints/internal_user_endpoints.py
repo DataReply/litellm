@@ -16,9 +16,9 @@ import asyncio
 import json
 import traceback
 from collections.abc import Awaitable, Mapping, Sequence
+from datetime import datetime, timedelta, timezone
 from types import MappingProxyType
 from typing import Any, Dict, Final, List, Literal, Optional, Protocol, Union, cast, overload
-from datetime import datetime, timedelta, timezone
 
 from litellm.litellm_core_utils.duration_parser import duration_in_seconds
 
@@ -28,16 +28,19 @@ from pydantic import TypeAdapter, ValidationError
 from typing_extensions import ReadOnly, TypedDict
 
 import litellm
+from litellm._internal_context import with_service_target
 from litellm._logging import verbose_proxy_logger
 from litellm._uuid import uuid
 from litellm.llms.custom_httpx.http_handler import AsyncHTTPHandler
 from litellm.proxy._types import *
 from litellm.proxy.auth.auth_checks import (
     delete_cache_key_objects,
+    forget_missing_user,
     get_jwt_key_mapping_cache_keys_for_tokens,
     get_team_object,
     get_user_object,
 )
+from litellm.proxy.auth.auth_utils import enforce_batch_limits_are_admin_only
 from litellm.proxy.auth.password_policy import (
     validate_password_not_breached,
     validate_password_policy,
@@ -46,6 +49,7 @@ from litellm.proxy.auth.password_policy import (
 from litellm.proxy.auth.user_api_key_auth import user_api_key_auth
 from litellm.proxy.common_utils.auth_cache_invalidation_pubsub import evict_and_broadcast
 from litellm.proxy.common_utils.user_api_key_cache import (
+    AUTH_OBJECTS_TARGET,
     object_permission_cache_key,
     user_object_permission_id_cache_key,
 )
@@ -53,37 +57,39 @@ from litellm.proxy.db.exception_handler import PrismaDBExceptionHandler
 from litellm.proxy.hooks.key_management_event_hooks import KeyManagementEventHooks
 from litellm.proxy.hooks.model_max_budget_limiter import build_model_max_budget_usage
 from litellm.proxy.hooks.user_management_event_hooks import UserManagementEventHooks
-from litellm.proxy.management.teams.access import is_team_admin
+from litellm.proxy.management.teams.authz import is_team_admin
 from litellm.proxy.management_endpoints.common_daily_activity import (
     DailySpendRecord,
     ScopeDenied,
     get_daily_activity,
     raise_public,
 )
-from litellm.proxy.management_endpoints.common_utils import (
-    _user_has_admin_view,
+from litellm.proxy.management_endpoints.common_utils import (  # noqa: F401  # legacy module exports
+    _user_has_admin_view,  # pyright: ignore[reportPrivateUsage,reportUnusedImport]  # backwards-compatible package export
     require_caller_user_id_for_non_admin,
+    user_api_key_has_admin_view,
     validate_budget_duration,
     validate_finite_spend,
 )
-from litellm.proxy.management_endpoints.key_management_endpoints import (
-    _check_permissions_caller_permission,
+from litellm.proxy.management_endpoints.key_management_endpoints import (  # noqa: F401  # legacy module exports
+    _check_permissions_caller_permission,  # pyright: ignore[reportPrivateUsage,reportUnusedImport]  # backwards-compatible package export
+    check_permissions_caller_permission,
     _enforce_email_prefix_on_key_alias,
     generate_key_helper_fn,
     prepare_metadata_fields,
 )
-from litellm.proxy.management_helpers.object_permission_utils import (
-    _set_object_permission,
+from litellm.proxy.management_helpers.bulk_user_deletion import delete_users_from_current_teams
+from litellm.proxy.management_helpers.object_permission_utils import (  # noqa: F401  # legacy module exports
+    _set_object_permission,  # pyright: ignore[reportPrivateUsage,reportUnusedImport]  # backwards-compatible package export
     handle_update_object_permission_common,
+    set_object_permission,
 )
 from litellm.proxy.management_helpers.utils import management_endpoint_wrapper
 from litellm.proxy.utils import handle_exception_on_proxy, hash_password
 from litellm.repositories.organization_repository import OrganizationRepository
 from litellm.repositories.prisma_protocols import TableActions
 from litellm.repositories.table_repositories import (
-    InvitationLinkRepository,
     OrganizationMembershipRepository,
-    TeamMembershipRepository,
 )
 from litellm.repositories.team_repository import TeamRepository
 from litellm.repositories.user_repository import UserRepository
@@ -117,8 +123,7 @@ if TYPE_CHECKING:
 
 router: Final = APIRouter()
 _USER_MODEL_BUDGET_ADAPTER: Final = TypeAdapter(dict[str, float | BudgetConfig])
-_USER_BUDGET_CACHE_INVALIDATION_BATCH_SIZE: Final = 50
-_USER_BUDGET_CACHE_FIELDS: Final = frozenset({"max_budget", "model_max_budget"})
+_USER_CACHE_INVALIDATION_BATCH_SIZE: Final = 50
 
 
 def _user_table(
@@ -157,15 +162,6 @@ def _organization_membership_table(
     return membership_table
 
 
-def _invitation_link_table(
-    prisma_client: "PrismaClient | None",
-) -> "TableActions[prisma_models.LiteLLM_InvitationLink]":
-    invitation_table: Final[TableActions[prisma_models.LiteLLM_InvitationLink]] = InvitationLinkRepository(
-        prisma_client
-    ).table
-    return invitation_table
-
-
 def _organization_table(
     prisma_client: "PrismaClient | None",
 ) -> "TableActions[prisma_models.LiteLLM_OrganizationTable]":
@@ -173,15 +169,6 @@ def _organization_table(
         prisma_client
     ).table
     return organization_table
-
-
-def _team_membership_table(
-    prisma_client: "PrismaClient | None",
-) -> "TableActions[prisma_models.LiteLLM_TeamMembership]":
-    team_membership_table: Final[TableActions[prisma_models.LiteLLM_TeamMembership]] = TeamMembershipRepository(
-        prisma_client
-    ).table
-    return team_membership_table
 
 def _get_user_credentials_rotation_interval():
     from litellm.constants import LITELLM_USER_CREDENTIALS_ROTATION_INTERVAL
@@ -201,7 +188,6 @@ def _calculate_password_expiry(rotation_interval: str) -> datetime:
     return datetime.now(timezone.utc) + timedelta(
         seconds=duration_in_seconds(rotation_interval)
     )
-
 
 async def _hash_password_in_dict(
     data: dict,
@@ -247,13 +233,10 @@ def _update_internal_new_user_params(data_json: dict, data: NewUserRequest) -> d
     auto_create_key: Final = data_json.pop("auto_create_key", True)
 
     if auto_create_key is False:
-        data_json["table_name"] = (
-            "user"  # only create a user, don't create key if 'auto_create_key' set to False
-        )
+        data_json["table_name"] = "user"  # only create a user, don't create key if 'auto_create_key' set to False
 
     if litellm.default_internal_user_params and (
-        data.user_role != LitellmUserRoles.PROXY_ADMIN.value
-        and data.user_role != LitellmUserRoles.PROXY_ADMIN
+        data.user_role != LitellmUserRoles.PROXY_ADMIN.value and data.user_role != LitellmUserRoles.PROXY_ADMIN
     ):
         for key, value in litellm.default_internal_user_params.items():
             if key == "available_teams":
@@ -268,20 +251,11 @@ def _update_internal_new_user_params(data_json: dict, data: NewUserRequest) -> d
                 data_json[key] = value
 
     ## INTERNAL USER ROLE ONLY DEFAULT PARAMS ##
-    if (
-        data.user_role is not None
-        and data.user_role == LitellmUserRoles.INTERNAL_USER.value
-    ):
-        if (
-            litellm.max_internal_user_budget is not None
-            and data_json.get("max_budget") is None
-        ):
+    if data.user_role is not None and data.user_role == LitellmUserRoles.INTERNAL_USER.value:
+        if litellm.max_internal_user_budget is not None and data_json.get("max_budget") is None:
             data_json["max_budget"] = litellm.max_internal_user_budget
 
-        if (
-            litellm.internal_user_budget_duration is not None
-            and data_json.get("budget_duration") is None
-        ):
+        if litellm.internal_user_budget_duration is not None and data_json.get("budget_duration") is None:
             data_json["budget_duration"] = litellm.internal_user_budget_duration
 
     data_json.pop("teams", None)  # handled separately
@@ -326,9 +300,7 @@ async def _check_duplicate_user_field(
             error_label: Final = label or field_name
             raise HTTPException(
                 status_code=409,
-                detail={
-                    "error": f"User with {error_label} {existing_value} already exists"
-                },
+                detail={"error": f"User with {error_label} {existing_value} already exists"},
             )
 
 
@@ -416,9 +388,7 @@ async def _add_user_to_team(
             user_api_key_dict=user_api_key_dict,
         )
     except HTTPException as e:
-        if e.status_code == 400 and (
-            "already exists" in str(e) or "doesn't exist" in str(e)
-        ):
+        if e.status_code == 400 and ("already exists" in str(e) or "doesn't exist" in str(e)):
             verbose_proxy_logger.debug(
                 "litellm.proxy.management_endpoints.internal_user_endpoints.new_user(): User already exists in team - %s",
                 e,
@@ -481,7 +451,7 @@ async def add_new_user_to_default_team(
     user_id: str,
     user_email: str | None,
     user_api_key_dict: UserAPIKeyAuth,
-    teams: list[str] | list[NewUserRequestTeam],
+    teams: Sequence[str | NewUserRequestTeam],
     prisma_client: "PrismaClient",
 ):
     tasks: Final[list[Awaitable[object]]] = []
@@ -583,7 +553,7 @@ async def new_user(
     ```shell
      curl -X POST "http://localhost:4000/user/new" \
      -H "Content-Type: application/json" \
-     -H "Authorization: Bearer sk-1234" \
+     -H "Authorization: Bearer $LITELLM_MASTER_KEY" \
      -d '{
          "username": "new_user",
          "email": "new_user@example.com"
@@ -594,9 +564,7 @@ async def new_user(
         from litellm.proxy.proxy_server import _license_check, general_settings, prisma_client
 
         if prisma_client is None:
-            raise HTTPException(
-                status_code=400, detail=CommonProxyErrors.db_not_connected_error.value
-            )
+            raise HTTPException(status_code=400, detail=CommonProxyErrors.db_not_connected_error.value)
 
         if prisma_client is None:
             raise HTTPException(
@@ -621,8 +589,7 @@ async def new_user(
         # Check if user_api_key_dict is actually a UserAPIKeyAuth instance (not a Depends object)
         # This can happen when the function is called directly in tests
         if (
-            data.user_role
-            in [LitellmUserRoles.PROXY_ADMIN, LitellmUserRoles.PROXY_ADMIN_VIEW_ONLY]
+            data.user_role in [LitellmUserRoles.PROXY_ADMIN, LitellmUserRoles.PROXY_ADMIN_VIEW_ONLY]
             and isinstance(user_api_key_dict, UserAPIKeyAuth)
             and user_api_key_dict.user_role != LitellmUserRoles.PROXY_ADMIN
         ):
@@ -631,7 +598,10 @@ async def new_user(
                 detail=f"Only proxy admins can create administrative users (proxy_admin, proxy_admin_viewer). Attempted to create user with role: {data.user_role}. Your role: {user_api_key_dict.user_role}",
             )
 
-        _check_permissions_caller_permission(
+        if data.auto_create_key and isinstance(user_api_key_dict, UserAPIKeyAuth):
+            enforce_batch_limits_are_admin_only(data, None, user_api_key_dict, "key")
+
+        check_permissions_caller_permission(
             data=data,
             user_api_key_dict=user_api_key_dict,
         )
@@ -648,7 +618,9 @@ async def new_user(
         # Persist the requested grants as their own row and link it, mirroring key/team creation.
         # generate_key_helper_fn only forwards object_permission_id, so without this the entitlement
         # the caller sent would be dropped on the floor.
-        data_json = await _set_object_permission(data_json=data_json, prisma_client=prisma_client)
+        data_json = await set_object_permission(  # rebind-ok: pre-existing rebinding on a rename-only line
+            data_json=data_json, prisma_client=prisma_client
+        )
         data_json.pop("password", None)
         teams = data.teams
         if teams is None:
@@ -656,6 +628,9 @@ async def new_user(
         organization_ids: Final = cast(list[str] | None, data_json.pop("organizations", None))
 
         response: Final = await generate_key_helper_fn(request_type="user", **data_json, llm_router=None)
+        created_user_id: Final = cast(str | None, response.get("user_id", None))
+        if created_user_id is not None:
+            forget_missing_user(created_user_id)
         # Admin UI Logic
         # Add User to Team and Organization
         # if team_id passed add this user to the team
@@ -831,7 +806,7 @@ def _enforce_user_info_access(user_id: str | None, user_api_key_dict: UserAPIKey
     # Admin-view roles (PROXY_ADMIN and PROXY_ADMIN_VIEW_ONLY) bypass
     # ownership, mirroring the `/user/info` carve-out that
     # `RouteChecks.non_proxy_admin_allowed_routes_check` applies upstream.
-    if _user_has_admin_view(user_api_key_dict):
+    if user_api_key_has_admin_view(user_api_key_dict):
         return
     if user_id == user_api_key_dict.user_id:
         return
@@ -999,7 +974,7 @@ async def user_info(
     Example request
     ```
     curl -X GET 'http://localhost:4000/user/info?user_id=krrish7%40berri.ai' \
-    --header 'Authorization: Bearer sk-1234'
+    --header "Authorization: Bearer $LITELLM_MASTER_KEY"
     ```
     """
     from litellm.proxy.proxy_server import model_max_budget_limiter, prisma_client
@@ -1012,7 +987,7 @@ async def user_info(
             raise Exception(
                 "Database not connected. Connect a database to your proxy - https://docs.litellm.ai/docs/simple_proxy#managing-auth---virtual-keys"
             )
-        if user_id is None and _user_has_admin_view(user_api_key_dict):
+        if user_id is None and user_api_key_has_admin_view(user_api_key_dict):
             return await _get_user_info_for_proxy_admin(user_api_key_dict=user_api_key_dict)
         elif user_id is None:
             user_id = user_api_key_dict.user_id
@@ -1088,7 +1063,7 @@ async def _check_user_info_v2_access(
         )
 
     # Rule 1: Proxy admins — fetch and return the target row directly
-    if _user_has_admin_view(user_api_key_dict):
+    if user_api_key_has_admin_view(user_api_key_dict):
         return await _fetch_target_user()
 
     # Rule 2: Self-lookup
@@ -1152,7 +1127,7 @@ async def user_info_v2(
     Example request:
     ```
     curl -X GET 'http://localhost:4000/v2/user/info?user_id=user123' \\
-    --header 'Authorization: Bearer sk-1234'
+    --header "Authorization: Bearer $LITELLM_MASTER_KEY"
     ```
     """
     from litellm.proxy.proxy_server import model_max_budget_limiter, prisma_client
@@ -1201,6 +1176,8 @@ async def user_info_v2(
             user_role=user_data.get("user_role"),
             spend=user_data.get("spend", 0.0),
             max_budget=user_data.get("max_budget"),
+            tpm_limit=user_data.get("tpm_limit"),
+            rpm_limit=user_data.get("rpm_limit"),
             models=user_data.get("models") or [],
             budget_duration=user_data.get("budget_duration"),
             budget_reset_at=user_data.get("budget_reset_at"),
@@ -1281,9 +1258,7 @@ async def _get_user_info_for_proxy_admin(user_api_key_dict: UserAPIKeyAuth):
         admin_user_info = await prisma_client.get_data(user_id=admin_user_id)
         if admin_user_info is not None:
             admin_user_info = (
-                admin_user_info.model_dump()
-                if isinstance(admin_user_info, BaseModel)
-                else admin_user_info
+                admin_user_info.model_dump() if isinstance(admin_user_info, BaseModel) else admin_user_info
             )
             if isinstance(admin_user_info, dict):
                 admin_user_info.pop("password", None)
@@ -1325,14 +1300,8 @@ def _process_keys_for_user_info(
             if _key.get("team_id") == UI_SESSION_TOKEN_TEAM_ID:
                 continue
 
-            if (
-                "team_id" in _key
-                and _key["team_id"] is not None
-                and _key["team_id"] != "litellm-dashboard"
-            ):
-                team_info = get_team_from_list(
-                    team_list=all_teams, team_id=_key["team_id"]
-                )
+            if "team_id" in _key and _key["team_id"] is not None and _key["team_id"] != "litellm-dashboard":
+                team_info = get_team_from_list(team_list=all_teams, team_id=_key["team_id"])
                 if team_info is not None:
                     team_alias = getattr(team_info, "team_alias", None)
                     _key["team_alias"] = team_alias
@@ -1349,7 +1318,7 @@ def _update_internal_user_params(data_json: dict, data: UpdateUserRequest | Upda
     fields_set: Final = data.fields_set() if hasattr(data, "fields_set") else set()
 
     for k, v in data_json.items():
-        if k in ("max_budget", "budget_duration"):
+        if k in ("max_budget", "budget_duration", "tpm_limit", "rpm_limit"):
             if k in fields_set:
                 non_default_values[k] = v
         elif k == "model_max_budget":
@@ -1390,13 +1359,9 @@ def _update_internal_user_params(data_json: dict, data: UpdateUserRequest | Upda
         ):  # applies internal user limits, if user role updated
             non_default_values["max_budget"] = litellm.max_internal_user_budget
 
-    if (
-        "budget_duration" not in non_default_values
-    ):  # applies internal user limits, if user role updated
+    if "budget_duration" not in non_default_values:  # applies internal user limits, if user role updated
         if is_internal_user and litellm.internal_user_budget_duration is not None:
-            non_default_values["budget_duration"] = (
-                litellm.internal_user_budget_duration
-            )
+            non_default_values["budget_duration"] = litellm.internal_user_budget_duration
             from litellm.proxy.common_utils.timezone_utils import get_budget_reset_time
 
             non_default_values["budget_reset_at"] = get_budget_reset_time(
@@ -1428,11 +1393,7 @@ async def _schedule_user_update_audit_log(
                     litellm_changed_by=litellm_changed_by or user_api_key_dict.user_id,
                     user_api_key_dict=user_api_key_dict,
                     litellm_proxy_admin_name=litellm_proxy_admin_name,
-                    before_value=(
-                        existing_user_row.model_dump_json(exclude_none=True)
-                        if existing_user_row
-                        else None
-                    ),
+                    before_value=(existing_user_row.model_dump_json(exclude_none=True) if existing_user_row else None),
                     after_value=user_row_typed.model_dump_json(exclude_none=True),
                 )
             )
@@ -1446,13 +1407,8 @@ def _check_user_update_authz(
     existing_user_row: BaseModel | None,
 ) -> None:
     """Authorization checks for /user/update — raises HTTPException on failure."""
-    if (
-        user_request.user_role is not None
-        and user_api_key_dict.user_role != LitellmUserRoles.PROXY_ADMIN.value
-    ):
-        raise HTTPException(
-            status_code=403, detail="Only proxy admins can modify user roles."
-        )
+    if user_request.user_role is not None and user_api_key_dict.user_role != LitellmUserRoles.PROXY_ADMIN.value:
+        raise HTTPException(status_code=403, detail="Only proxy admins can modify user roles.")
 
     if existing_user_row is not None:
         typed_row: Final = LiteLLM_UserTable.model_validate(existing_user_row.model_dump(exclude_none=True))
@@ -1485,11 +1441,9 @@ async def _invalidate_user_spend_counter_if_changed(
     and not safely subscriptable).
     """
     if non_default_values.get("spend") is not None:
-        from litellm.proxy.proxy_server import _invalidate_spend_counter
+        from litellm.proxy.proxy_server import invalidate_spend_counter
 
-        await _invalidate_spend_counter(
-            counter_key=f"spend:user:{non_default_values['user_id']}"
-        )
+        await invalidate_spend_counter(counter_key=f"spend:user:{non_default_values['user_id']}")
 
 
 def _clears_object_permission(user_request: UpdateUserRequest) -> bool:
@@ -1504,6 +1458,7 @@ def _clears_object_permission(user_request: UpdateUserRequest) -> bool:
     return sent is None or not sent.model_dump(exclude_unset=True, exclude_none=True)
 
 
+@with_service_target(AUTH_OBJECTS_TARGET)
 async def _invalidate_cached_user_entitlement(user_id: str | None, object_permission_ids: tuple[str, ...]) -> None:
     """Drop the cache entries an entitlement change makes stale.
 
@@ -1527,11 +1482,7 @@ async def _invalidate_cached_user_entitlement(user_id: str | None, object_permis
         *(object_permission_cache_key(permission_id) for permission_id in dict.fromkeys(object_permission_ids)),
         *((user_object_permission_id_cache_key(user_id), user_id) if user_id is not None else ()),
     )
-    for key in keys:
-        try:
-            await user_api_key_cache.async_delete_cache(key=key)
-        except Exception as e:  # noqa: BLE001  # a cache we cannot clear still expires; never fail the write
-            verbose_proxy_logger.warning("Failed to invalidate cached entitlement key %r: %s", key, e)
+    await evict_and_broadcast(cache_keys=keys, user_api_key_cache=user_api_key_cache)
 
 
 async def _update_single_user_helper(
@@ -1555,7 +1506,7 @@ async def _update_single_user_helper(
     if not user_request.user_id and not user_request.user_email:
         raise ValueError("Either user_id or user_email must be provided")
 
-    _check_permissions_caller_permission(
+    check_permissions_caller_permission(
         data=user_request,
         user_api_key_dict=user_api_key_dict,
     )
@@ -1652,11 +1603,7 @@ async def _update_single_user_helper(
             query_type="find_all",
         )
 
-        if (
-            existing_user_rows
-            and isinstance(existing_user_rows, list)
-            and len(existing_user_rows) > 0
-        ):
+        if existing_user_rows and isinstance(existing_user_rows, list) and len(existing_user_rows) > 0:
             for existing_user in existing_user_rows:
                 non_default_values["user_id"] = existing_user.user_id
                 response = await prisma_client.update_data(
@@ -1700,11 +1647,10 @@ async def _update_single_user_helper(
 
         await _invalidate_user_spend_counter_if_changed(non_default_values)
 
-        if not _USER_BUDGET_CACHE_FIELDS.isdisjoint(non_default_values) or "metadata" in data_json:
-            await evict_and_broadcast(
-                cache_keys=(non_default_values["user_id"],),
-                user_api_key_cache=user_api_key_cache,
-            )
+        await evict_and_broadcast(
+            cache_keys=(non_default_values["user_id"],),
+            user_api_key_cache=user_api_key_cache,
+        )
 
         if "object_permission_id" in non_default_values:
             await _invalidate_cached_user_entitlement(
@@ -1758,7 +1704,7 @@ async def user_update(
 
     ```
     curl --location 'http://0.0.0.0:4000/user/update' \
-    --header 'Authorization: Bearer sk-1234' \
+    --header "Authorization: Bearer $LITELLM_MASTER_KEY" \
     --header 'Content-Type: application/json' \
     --data '{
         "user_id": "test-litellm-user-4",
@@ -1873,11 +1819,7 @@ async def bulk_update_processed_users(
                 # Record success
                 results.append(
                     UserUpdateResult(
-                        user_id=(
-                            response.get("user_id")
-                            if response
-                            else user_request.user_id
-                        ),
+                        user_id=(response.get("user_id") if response else user_request.user_id),
                         user_email=user_request.user_email,
                         success=True,
                         updated_user=response,
@@ -1950,7 +1892,7 @@ async def bulk_user_update(
     Example request for specific users:
     ```bash
     curl --location 'http://0.0.0.0:4000/user/bulk_update' \
-    --header 'Authorization: Bearer sk-1234' \
+    --header "Authorization: Bearer $LITELLM_MASTER_KEY" \
     --header 'Content-Type: application/json' \
     --data '{
         "users": [
@@ -1971,7 +1913,7 @@ async def bulk_user_update(
     Example request for all users:
     ```bash
     curl --location 'http://0.0.0.0:4000/user/bulk_update' \
-    --header 'Authorization: Bearer sk-1234' \
+    --header "Authorization: Bearer $LITELLM_MASTER_KEY" \
     --header 'Content-Type: application/json' \
     --data '{
         "all_users": true,
@@ -1991,17 +1933,10 @@ async def bulk_user_update(
         )
 
     # Only proxy admins can modify user_role in bulk updates
-    _bulk_role = (
-        getattr(data.user_updates, "user_role", None) if data.user_updates else None
-    )
+    _bulk_role = getattr(data.user_updates, "user_role", None) if data.user_updates else None
     if _bulk_role is None and data.users:
-        _bulk_role = next(
-            (u.user_role for u in data.users if u.user_role is not None), None
-        )
-    if (
-        _bulk_role is not None
-        and user_api_key_dict.user_role != LitellmUserRoles.PROXY_ADMIN.value
-    ):
+        _bulk_role = next((u.user_role for u in data.users if u.user_role is not None), None)
+    if _bulk_role is not None and user_api_key_dict.user_role != LitellmUserRoles.PROXY_ADMIN.value:
         raise HTTPException(
             status_code=403,
             detail="Only proxy admins can modify user roles.",
@@ -2069,14 +2004,13 @@ async def bulk_user_update(
                 ),
             )
 
-            if not _USER_BUDGET_CACHE_FIELDS.isdisjoint(non_default_values):
-                for start in range(0, len(all_users_in_db), _USER_BUDGET_CACHE_INVALIDATION_BATCH_SIZE):
-                    await asyncio.gather(
-                        *(
-                            evict_and_broadcast(cache_keys=(user.user_id,), user_api_key_cache=user_api_key_cache)
-                            for user in all_users_in_db[start : start + _USER_BUDGET_CACHE_INVALIDATION_BATCH_SIZE]
-                        )
+            for start in range(0, len(all_users_in_db), _USER_CACHE_INVALIDATION_BATCH_SIZE):
+                await asyncio.gather(
+                    *(
+                        evict_and_broadcast(cache_keys=(user.user_id,), user_api_key_cache=user_api_key_cache)
+                        for user in all_users_in_db[start : start + _USER_CACHE_INVALIDATION_BATCH_SIZE]
                     )
+                )
 
             # Create individual success results
             for user in all_users_in_db:
@@ -2096,8 +2030,7 @@ async def bulk_user_update(
                     UserManagementEventHooks.create_internal_user_audit_log(
                         user_id=user_api_key_dict.user_id or "",
                         action="updated",
-                        litellm_changed_by=litellm_changed_by
-                        or user_api_key_dict.user_id,
+                        litellm_changed_by=litellm_changed_by or user_api_key_dict.user_id,
                         user_api_key_dict=user_api_key_dict,
                         litellm_proxy_admin_name=litellm_proxy_admin_name,
                         before_value=f"Updated {len(all_users_in_db)} users",
@@ -2193,7 +2126,9 @@ async def get_user_key_counts(
     return result
 
 
-def _validate_sort_params(sort_by: str | None, sort_order: str) -> dict[str, str] | None:
+def _validate_sort_params(
+    sort_by: str | None, sort_order: str
+) -> Mapping[str, object] | Sequence[Mapping[str, object]] | None:
     order_by: Final[dict[str, str]] = {}
 
     if sort_by is None:
@@ -2206,13 +2141,16 @@ def _validate_sort_params(sort_by: str | None, sort_order: str) -> dict[str, str
         "spend",
         "user_alias",
         "user_role",
+        "max_budget",
+        "updated_at",
+        "sso_user_id",
+        "status",
+        "key_count",
     ]
     if sort_by not in valid_columns:
         raise HTTPException(
             status_code=400,
-            detail={
-                "error": f"Invalid sort column. Must be one of: {', '.join(valid_columns)}"
-            },
+            detail={"error": f"Invalid sort column. Must be one of: {', '.join(valid_columns)}"},
         )
 
     # Validate sort_order
@@ -2222,6 +2160,11 @@ def _validate_sort_params(sort_by: str | None, sort_order: str) -> dict[str, str
             detail={"error": "Invalid sort order. Must be 'asc' or 'desc'"},
         )
 
+    if sort_by in {"status", "key_count"}:
+        return None
+    if sort_by in {"max_budget", "updated_at", "sso_user_id"}:
+        nulls: Final = "first" if sort_by == "max_budget" and sort_order.lower() == "desc" else "last"
+        return ({sort_by: {"sort": sort_order.lower(), "nulls": nulls}}, {"user_id": "asc"})
     order_by[sort_by] = sort_order.lower()
 
     return order_by
@@ -2241,15 +2184,13 @@ async def _authorize_user_list_request(
     - Org admins: returns comma-separated org IDs scoped to their allowed orgs.
     - Others: raises 403.
     """
-    if _user_has_admin_view(user_api_key_dict):
+    if user_api_key_has_admin_view(user_api_key_dict):
         return organization_ids
 
     if user_api_key_dict.user_id is None:
         raise HTTPException(
             status_code=403,
-            detail={
-                "error": "Only proxy admins and organization admins can list users."
-            },
+            detail={"error": "Only proxy admins and organization admins can list users."},
         )
     try:
         caller_user: Final = await get_user_object(
@@ -2262,16 +2203,12 @@ async def _authorize_user_list_request(
     except ValueError:
         raise HTTPException(
             status_code=403,
-            detail={
-                "error": "Only proxy admins and organization admins can list users."
-            },
+            detail={"error": "Only proxy admins and organization admins can list users."},
         )
     if caller_user is None:
         raise HTTPException(
             status_code=403,
-            detail={
-                "error": "Only proxy admins and organization admins can list users."
-            },
+            detail={"error": "Only proxy admins and organization admins can list users."},
         )
 
     allowed_org_ids = [
@@ -2282,9 +2219,7 @@ async def _authorize_user_list_request(
     if not allowed_org_ids:
         raise HTTPException(
             status_code=403,
-            detail={
-                "error": "Only proxy admins and organization admins can list users."
-            },
+            detail={"error": "Only proxy admins and organization admins can list users."},
         )
 
     # If client also sent organization_ids, intersect with allowed orgs
@@ -2294,9 +2229,7 @@ async def _authorize_user_list_request(
         if not intersection:
             raise HTTPException(
                 status_code=403,
-                detail={
-                    "error": "You do not have org_admin access to the requested organization(s)."
-                },
+                detail={"error": "You do not have org_admin access to the requested organization(s)."},
             )
         allowed_org_ids = intersection
 
@@ -2439,9 +2372,7 @@ async def get_users(
     if organization_ids:
         org_id_list: Final = [oid.strip() for oid in organization_ids.split(",") if oid.strip()]
         if org_id_list:
-            where_conditions["organization_memberships"] = {
-                "some": {"organization_id": {"in": org_id_list}}
-            }
+            where_conditions["organization_memberships"] = {"some": {"organization_id": {"in": org_id_list}}}
 
     ## Filter any none fastapi.Query params - e.g. where_conditions: {'user_email': {'contains': Query(None), 'mode': 'insensitive'}, 'teams': {'has': Query(None)}}
     where: Final[Mapping[str, object]] = {
@@ -2452,18 +2383,40 @@ async def get_users(
 
     # Build order_by conditions
 
-    order_by: Final[dict[str, str] | None] = (
+    order_by: Final = (
         _validate_sort_params(sort_by, sort_order) if sort_by is not None and isinstance(sort_by, str) else None
     )
 
-    users: Final[Sequence[prisma_models.LiteLLM_UserTable]] = await UserRepository(prisma_client).table.find_many(
-        where=where,
-        skip=skip,
-        take=page_size,
-        order=(
-            order_by if order_by else {"created_at": "desc"}
-        ),  # Default to created_at desc if no sort specified
+    from litellm.proxy.management_helpers.user_list_sorting import sorted_user_ids
+
+    computed_sort: Final = sort_by in ("status", "key_count")
+    sorted_ids: Final = (
+        await sorted_user_ids(
+            prisma_client,
+            sort_by="status" if sort_by == "status" else "key_count",
+            descending=sort_order.lower() == "desc",
+            skip=skip,
+            take=page_size,
+            role=role,
+            user_ids=user_ids,
+            user_email=user_email,
+            team=team,
+            sso_user_ids=sso_user_ids,
+            organization_ids=organization_ids,
+            search=search,
+        )
+        if computed_sort
+        else ()
     )
+    page_users: Final = await UserRepository(prisma_client).table.find_many(
+        # bounded-ok: sorted_ids comes from LIMIT page_size, capped at 100 by the route
+        where={"AND": (where, {"user_id": {"in": sorted_ids}})} if computed_sort else where,
+        skip=0 if computed_sort else skip,
+        take=page_size,
+        order=order_by if order_by else {"created_at": "desc"},
+    )
+    positions: Final = {user_id: index for index, user_id in enumerate(sorted_ids)}
+    users: Final = sorted(page_users, key=lambda user: positions[user.user_id]) if computed_sort else page_users
 
     # Get total count of user rows
     total_count: Final[int] = await UserRepository(prisma_client).table.count(where=where)
@@ -2516,7 +2469,7 @@ async def delete_user(
     ```
     curl --location 'http://0.0.0.0:4000/user/delete' \
 
-    --header 'Authorization: Bearer sk-1234' \
+    --header "Authorization: Bearer $LITELLM_MASTER_KEY" \
 
     --header 'Content-Type: application/json' \
 
@@ -2528,9 +2481,6 @@ async def delete_user(
     Parameters:
     - user_ids: List[str] - The list of user id's to be deleted.
     """
-    from litellm.proxy.management_endpoints.team_endpoints import (
-        _cleanup_members_with_roles,
-    )
     from litellm.proxy.management_helpers.audit_logs import (
         get_audit_log_changed_by,
         is_audit_logging_enabled,
@@ -2568,15 +2518,11 @@ async def delete_user(
             if user_api_key_dict.user_id
             else []
         )
-        caller_admin_org_ids = {
-            m.organization_id for m in caller_memberships if m.organization_id
-        }
+        caller_admin_org_ids = {m.organization_id for m in caller_memberships if m.organization_id}
         if not caller_admin_org_ids:
             raise HTTPException(
                 status_code=403,
-                detail={
-                    "error": "Only PROXY_ADMIN or ORG_ADMIN users may delete users."
-                },
+                detail={"error": "Only PROXY_ADMIN or ORG_ADMIN users may delete users."},
             )
 
     # Batch-fetch target memberships once before the per-user loop. Avoids
@@ -2593,9 +2539,7 @@ async def delete_user(
 
     # check that all teams passed exist
     for user_id in data.user_ids:
-        user_row = await UserRepository(prisma_client).table.find_unique(
-            where={"user_id": user_id}
-        )
+        user_row = await UserRepository(prisma_client).table.find_unique(where={"user_id": user_id})
 
         if user_row is None:
             raise HTTPException(
@@ -2645,31 +2589,6 @@ async def delete_user(
                 )
             )
 
-        ## CLEANUP MEMBERS_WITH_ROLES
-        fetch_all_teams: Sequence[prisma_models.LiteLLM_TeamTable] = await TeamRepository(
-            prisma_client
-        ).table.find_many(where={"team_id": {"in": user_row.teams}})
-        teams_to_update: list[tuple[str, str]] = []
-        for team in fetch_all_teams:
-            removed_team_members, new_team_members = _cleanup_members_with_roles(
-                existing_team_row=LiteLLM_TeamTable.model_validate(team.model_dump()),
-                data=TeamMemberDeleteRequest(
-                    team_id=team.team_id,
-                    user_id=user_row.user_id,
-                    user_email=user_row.user_email,
-                ),
-            )
-            if removed_team_members:
-                _db_new_team_members: list[dict] = [m.model_dump() for m in new_team_members]
-                teams_to_update.append((team.team_id, json.dumps(_db_new_team_members)))
-
-        ## update teams
-
-        for team_id, members_with_roles in teams_to_update:
-            await TeamRepository(prisma_client).table.update(
-                where={"team_id": team_id},
-                data={"members_with_roles": members_with_roles},
-            )
     # End of Audit logging
 
     ## DELETE ASSOCIATED KEYS
@@ -2694,27 +2613,16 @@ async def delete_user(
     )
     await evict_and_broadcast(cache_keys=jwt_mapping_cache_keys, user_api_key_cache=user_api_key_cache)
 
-    ## DELETE ASSOCIATED INVITATION LINKS
-    await _invitation_link_table(prisma_client).delete_many(
-        where={
-            "OR": [
-                {"user_id": {"in": data.user_ids}},
-                {"created_by": {"in": data.user_ids}},
-                {"updated_by": {"in": data.user_ids}},
-            ]
-        }
+    deleted_users: Final = await delete_users_from_current_teams(
+        prisma_client=prisma_client,
+        user_ids=data.user_ids,
+        user_api_key_dict=user_api_key_dict,
+        user_api_key_cache=user_api_key_cache,
+        proxy_logging_obj=proxy_logging_obj,
+        litellm_changed_by=litellm_changed_by,
     )
-
-    ## DELETE ASSOCIATED ORGANIZATION MEMBERSHIPS
-    await _organization_membership_table(prisma_client).delete_many(where={"user_id": {"in": data.user_ids}})
-
-    ## DELETE ASSOCIATED TEAM MEMBERSHIPS
-    await _team_membership_table(prisma_client).delete_many(where={"user_id": {"in": data.user_ids}})
-
-    ## DELETE USERS
-    deleted_users: Final = await _user_table(prisma_client).delete_many(where={"user_id": {"in": data.user_ids}})
-    await evict_and_broadcast(cache_keys=tuple(data.user_ids), user_api_key_cache=user_api_key_cache)
-
+    if isinstance(deleted_users, str):
+        raise HTTPException(status_code=500, detail={"error": deleted_users})
     return deleted_users
 
 
@@ -2745,9 +2653,7 @@ async def add_internal_user_to_organization(
             where={"organization_id": organization_id}
         )
         if organization_row is None:
-            raise Exception(
-                f"Organization not found, passed organization_id={organization_id}"
-            )
+            raise Exception(f"Organization not found, passed organization_id={organization_id}")
 
         # Create a new organization membership entry
         new_membership: Final[prisma_models.LiteLLM_OrganizationMembership] = await OrganizationMembershipRepository(
@@ -2787,7 +2693,7 @@ async def _resolve_org_filter_for_user_search(
     if not ui_settings.get("scope_user_search_to_org", False):
         return None  # flag OFF — no filtering
 
-    if _user_has_admin_view(user_api_key_dict):
+    if user_api_key_has_admin_view(user_api_key_dict):
         return None  # proxy admin — see everything
 
     # Try to resolve org admin memberships
@@ -2808,9 +2714,7 @@ async def _resolve_org_filter_for_user_search(
     # This allows team admins who are org members to search users in their org.
     member_org_ids: list[str] = []
     if caller_user is not None:
-        member_org_ids = [
-            m.organization_id for m in (caller_user.organization_memberships or [])
-        ]
+        member_org_ids = [m.organization_id for m in (caller_user.organization_memberships or [])]
 
     if member_org_ids:
         return member_org_ids
@@ -2852,17 +2756,13 @@ async def _resolve_team_org_filter(
     except HTTPException:
         raise HTTPException(
             status_code=403,
-            detail={
-                "error": f"scope_user_search_to_org is enabled but team '{team_id}' was not found."
-            },
+            detail={"error": f"scope_user_search_to_org is enabled but team '{team_id}' was not found."},
         )
 
     if not is_team_admin(user_api_key_dict, team_obj):
         raise HTTPException(
             status_code=403,
-            detail={
-                "error": "scope_user_search_to_org is enabled. You must be an admin of this team to search users."
-            },
+            detail={"error": "scope_user_search_to_org is enabled. You must be an admin of this team to search users."},
         )
 
     if team_obj.organization_id:
@@ -2896,12 +2796,8 @@ async def ui_view_users(
         default=None,
         description="Team ID — used when a team admin searches for users to add to their team",
     ),
-    page: int = fastapi.Query(
-        default=1, description="Page number for pagination", ge=1
-    ),
-    page_size: int = fastapi.Query(
-        default=50, description="Number of items per page", ge=1, le=100
-    ),
+    page: int = fastapi.Query(default=1, description="Page number for pagination", ge=1),
+    page_size: int = fastapi.Query(default=50, description="Number of items per page", ge=1, le=100),
     user_api_key_dict: UserAPIKeyAuth = Depends(user_api_key_auth),
 ):
     """
@@ -2955,9 +2851,7 @@ async def ui_view_users(
 
         # Apply org filter when scope_user_search_to_org is ON and caller is not proxy admin
         if org_filter_ids is not None:
-            where_conditions["organization_memberships"] = {
-                "some": {"organization_id": {"in": org_filter_ids}}
-            }
+            where_conditions["organization_memberships"] = {"some": {"organization_id": {"in": org_filter_ids}}}
 
         where: Final[Mapping[str, object]] = {
             key: value
@@ -2994,7 +2888,7 @@ async def ui_view_users(
 def resolve_user_daily_activity_entity_ids(
     *, user_id: str | None, user_api_key_dict: UserAPIKeyAuth
 ) -> tuple[str, ...] | None | ScopeDenied:
-    if _user_has_admin_view(user_api_key_dict):
+    if user_api_key_has_admin_view(user_api_key_dict):
         return (user_id,) if user_id is not None else None
 
     caller_user_id: Final = require_caller_user_id_for_non_admin(user_api_key_dict)
