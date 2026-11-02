@@ -7,11 +7,11 @@ model_list:
 mcp_servers:
   branded_document_renderer:
     transport: http
-    url: os.environ/AGENTCORE_DOCUMENT_RENDERER_MCP_URL
+    url: os.environ/DOCUMENT_RENDERER_MCP_URL
     auth_type: aws_sigv4
-    aws_region_name: os.environ/AWS_REGION
-    aws_service_name: bedrock-agentcore
-    aws_role_name: os.environ/AGENTCORE_DOCUMENT_RENDERER_ROLE_ARN
+    aws_region_name: os.environ/DOCUMENT_RENDERER_REGION
+    aws_service_name: lambda
+    aws_role_name: os.environ/DOCUMENT_RENDERER_ROLE_ARN
     aws_session_name: litellm-document-renderer
     description: Render approved Markdown into branded PDF documents.
     allowed_tools:

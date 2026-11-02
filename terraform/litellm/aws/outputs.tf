@@ -14,7 +14,7 @@ output "ecs_cluster" {
 }
 
 output "gateway_task_role_arn" {
-  description = "IAM role ARN used by the LiteLLM gateway task. Add this principal to the document-renderer invocation role trust policy when AgentCore integration is enabled."
+  description = "IAM role ARN used by the LiteLLM gateway task. Add this principal to the document-renderer invocation role trust policy when Function URL integration is enabled."
   value       = aws_iam_role.task.arn
 }
 

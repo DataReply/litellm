@@ -137,26 +137,26 @@ variable "bedrock_models" {
   default = []
 }
 
-variable "agentcore_document_renderer_enabled" {
-  description = "Enable the AgentCore document-renderer MCP integration."
+variable "document_renderer_enabled" {
+  description = "Enable the Lambda Function URL document-renderer MCP integration."
   type        = bool
   default     = false
 }
 
-variable "agentcore_document_renderer_gateway_url" {
-  description = "HTTPS URL of the document-renderer AgentCore MCP Gateway."
+variable "document_renderer_function_url" {
+  description = "HTTPS Lambda Function URL ending in /mcp."
   type        = string
   default     = ""
 }
 
-variable "agentcore_document_renderer_role_arn" {
+variable "document_renderer_role_arn" {
   description = "Invocation role ARN assumed by the LiteLLM gateway task."
   type        = string
   default     = ""
 }
 
-variable "agentcore_document_renderer_region" {
-  description = "AWS Region of the document-renderer AgentCore MCP Gateway. Empty uses region."
+variable "document_renderer_region" {
+  description = "AWS Region of the document-renderer Lambda Function URL. Empty uses region."
   type        = string
   default     = ""
 }

@@ -104,18 +104,18 @@ backend_extra_env = {
 }
 ```
 
-### AgentCore document renderer
+### Lambda Function URL document renderer
 
-Set `agentcore_document_renderer_enabled` to add the branded-document renderer MCP server to the generated gateway configuration. The module passes only the Gateway URL, invocation role ARN, and Gateway Region to the gateway task, then grants that task `sts:AssumeRole` for the supplied role ARN.
+Set `document_renderer_enabled` to add the branded-document renderer MCP server to the generated gateway configuration. The module passes the Lambda Function URL, invocation role ARN, and region to the gateway task, then grants that task `sts:AssumeRole` for the supplied role ARN.
 
 ```hcl
-agentcore_document_renderer_enabled     = true
-agentcore_document_renderer_gateway_url = "https://..."
-agentcore_document_renderer_role_arn    = "arn:aws:iam::123456789012:role/..."
-agentcore_document_renderer_region      = "eu-west-1"
+document_renderer_enabled      = true
+document_renderer_function_url = "https://...lambda-url.eu-west-1.on.aws/mcp"
+document_renderer_role_arn     = "arn:aws:iam::123456789012:role/..."
+document_renderer_region       = "eu-west-1"
 ```
 
-The assumed role must allow `bedrock-agentcore:InvokeGateway` only on this Gateway. Its trust policy must allow this module's ECS task role, and the Gateway Cedar policy must allow the assumed role. This module does not create or broaden either policy because they belong to the project that owns the AgentCore Gateway. The proxy task receives no direct Lambda permission and no static AWS credentials.
+The assumed role must allow `lambda:InvokeFunctionUrl` and `lambda:InvokeFunction` only on the target renderer. Its trust policy must allow this module's ECS task role, and the Lambda Function URL resource policy must allow the assumed role. This module does not create or broaden either policy because they belong to the project that owns the renderer. The proxy task has no static AWS credentials.
 
 The integration configures `validate_document`, `list_supported_formats`, and `render_data_reply_pdf`. Do not define another `branded_document_renderer` entry in `proxy_config.mcp_servers`; the module owns that key while this integration is enabled.
 
