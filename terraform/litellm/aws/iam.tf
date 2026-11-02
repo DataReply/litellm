@@ -110,6 +110,23 @@ resource "aws_iam_role_policy_attachment" "task_rds_iam_connect" {
   policy_arn = aws_iam_policy.rds_iam_connect.arn
 }
 
+data "aws_iam_policy_document" "task_agentcore_document_renderer_assume" {
+  count = var.agentcore_document_renderer_enabled ? 1 : 0
+
+  statement {
+    actions   = ["sts:AssumeRole"]
+    resources = [var.agentcore_document_renderer_role_arn]
+  }
+}
+
+resource "aws_iam_role_policy" "task_agentcore_document_renderer_assume" {
+  count = var.agentcore_document_renderer_enabled ? 1 : 0
+
+  name   = "${local.name}-task-agentcore-document-renderer-assume"
+  role   = aws_iam_role.task.name
+  policy = data.aws_iam_policy_document.task_agentcore_document_renderer_assume[0].json
+}
+
 # ---------- UI task role ----------
 #
 # The UI is static nginx with no DB, S3, or Secrets Manager dependencies,

@@ -13,6 +13,11 @@ output "ecs_cluster" {
   value       = aws_ecs_cluster.this.name
 }
 
+output "gateway_task_role_arn" {
+  description = "IAM role ARN used by the LiteLLM gateway task. Add this principal to the document-renderer invocation role trust policy when AgentCore integration is enabled."
+  value       = aws_iam_role.task.arn
+}
+
 output "aurora_writer_endpoint" {
   description = "Aurora writer endpoint (cluster endpoint). Used by gateway/backend as DATABASE_HOST."
   value       = aws_rds_cluster.this.endpoint

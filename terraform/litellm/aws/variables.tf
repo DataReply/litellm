@@ -481,6 +481,45 @@ variable "backend_extra_secrets" {
   default     = {}
 }
 
+variable "agentcore_document_renderer_enabled" {
+  description = "Enable the AgentCore document-renderer MCP integration for the gateway task."
+  type        = bool
+  default     = false
+}
+
+variable "agentcore_document_renderer_gateway_url" {
+  description = "HTTPS URL of the AgentCore MCP Gateway that serves the document renderer. Required when agentcore_document_renderer_enabled is true."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.agentcore_document_renderer_gateway_url == "" || can(regex("^https://[^/]+(?:/.*)?$", var.agentcore_document_renderer_gateway_url))
+    error_message = "agentcore_document_renderer_gateway_url must be an HTTPS URL."
+  }
+}
+
+variable "agentcore_document_renderer_role_arn" {
+  description = "IAM role ARN that the gateway task assumes to invoke the document-renderer AgentCore MCP Gateway. Required when agentcore_document_renderer_enabled is true."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.agentcore_document_renderer_role_arn == "" || can(regex("^arn:[^:]+:iam::[0-9]{12}:role/.+$", var.agentcore_document_renderer_role_arn))
+    error_message = "agentcore_document_renderer_role_arn must be an IAM role ARN."
+  }
+}
+
+variable "agentcore_document_renderer_region" {
+  description = "AWS Region of the document-renderer AgentCore MCP Gateway. Empty uses region."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.agentcore_document_renderer_region == "" || can(regex("^[a-z]{2}(?:-gov)?-[a-z]+-[0-9]+$", var.agentcore_document_renderer_region))
+    error_message = "agentcore_document_renderer_region must be a valid AWS Region identifier."
+  }
+}
+
 variable "proxy_config" {
   description = <<-EOT
     LiteLLM proxy config (the contents of config.yaml). Mirrors the helm

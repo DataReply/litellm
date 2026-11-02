@@ -162,6 +162,27 @@ locals {
     for k, v in var.backend_extra_secrets : { name = k, valueFrom = v }
   ]
 
+  agentcore_document_renderer_region = var.agentcore_document_renderer_region != "" ? var.agentcore_document_renderer_region : var.region
+  agentcore_document_renderer_env = var.agentcore_document_renderer_enabled ? [
+    { name = "AGENTCORE_DOCUMENT_RENDERER_MCP_URL", value = var.agentcore_document_renderer_gateway_url },
+    { name = "AGENTCORE_DOCUMENT_RENDERER_ROLE_ARN", value = var.agentcore_document_renderer_role_arn },
+    { name = "AGENTCORE_DOCUMENT_RENDERER_REGION", value = local.agentcore_document_renderer_region },
+  ] : []
+  agentcore_document_renderer_mcp_servers = var.agentcore_document_renderer_enabled ? {
+    branded_document_renderer = {
+      transport        = "http"
+      url              = "os.environ/AGENTCORE_DOCUMENT_RENDERER_MCP_URL"
+      auth_type        = "aws_sigv4"
+      aws_region_name  = "os.environ/AGENTCORE_DOCUMENT_RENDERER_REGION"
+      aws_service_name = "bedrock-agentcore"
+      aws_role_name    = "os.environ/AGENTCORE_DOCUMENT_RENDERER_ROLE_ARN"
+      aws_session_name = "litellm-document-renderer"
+      description      = "Render approved Markdown into branded PDF documents."
+      allowed_tools    = ["validate_document", "list_supported_formats", "render_data_reply_pdf"]
+    }
+  } : {}
+  proxy_config_mcp_servers = try(var.proxy_config.mcp_servers, {})
+
   bedrock_model_list = [
     for model in var.bedrock_models : {
       model_name = model.model_name
@@ -184,7 +205,8 @@ locals {
   merged_proxy_config = merge(
     var.proxy_config,
     {
-      model_list = concat(local.proxy_config_model_list, local.bedrock_model_list)
+      model_list  = concat(local.proxy_config_model_list, local.bedrock_model_list)
+      mcp_servers = merge(local.proxy_config_mcp_servers, local.agentcore_document_renderer_mcp_servers)
     },
   )
 
@@ -194,8 +216,14 @@ locals {
   # downloads it to /tmp/litellm-config.yaml via boto3 before exec'ing
   # uvicorn. The S3 object's etag is embedded in the task definition so a
   # config edit forces a new task-def revision and a rolling redeploy.
-  proxy_config_enabled = length(keys(var.proxy_config)) > 0 || length(local.bedrock_model_list) > 0
+  proxy_config_enabled = length(keys(var.proxy_config)) > 0 || length(local.bedrock_model_list) > 0 || var.agentcore_document_renderer_enabled
   proxy_config_path    = "/tmp/litellm-config.yaml"
+
+  agentcore_document_renderer_configuration_valid = !var.agentcore_document_renderer_enabled || (
+    var.agentcore_document_renderer_gateway_url != "" &&
+    var.agentcore_document_renderer_role_arn != "" &&
+    !contains(keys(local.proxy_config_mcp_servers), "branded_document_renderer")
+  )
 
   proxy_config_env = local.proxy_config_enabled ? [
     { name = "CONFIG_FILE_PATH", value = local.proxy_config_path },
@@ -256,6 +284,11 @@ resource "aws_ecs_task_definition" "gateway" {
       )
       error_message = "billing_metrics_client_cert_pem and billing_metrics_client_key_pem are both required when billing_metrics_endpoint is set."
     }
+
+    precondition {
+      condition     = local.agentcore_document_renderer_configuration_valid
+      error_message = "agentcore_document_renderer_gateway_url and agentcore_document_renderer_role_arn are required when agentcore_document_renderer_enabled is true, and proxy_config.mcp_servers must not define branded_document_renderer."
+    }
   }
 
   family                   = "${local.name}-gateway"
@@ -280,6 +313,7 @@ resource "aws_ecs_task_definition" "gateway" {
           local.shared_env,
           local.gateway_otel_env,
           local.billing_metrics_env,
+          local.agentcore_document_renderer_env,
           local.gateway_extra_env_list,
           local.proxy_config_env,
         )
