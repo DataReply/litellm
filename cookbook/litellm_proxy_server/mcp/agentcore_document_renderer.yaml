@@ -1,0 +1,23 @@
+model_list:
+  - model_name: document-tool-model
+    litellm_params:
+      model: bedrock/converse/eu.anthropic.claude-sonnet-4-5-20250929-v1:0
+      aws_region_name: eu-west-1
+
+mcp_servers:
+  branded_document_renderer:
+    transport: http
+    url: os.environ/AGENTCORE_DOCUMENT_RENDERER_MCP_URL
+    auth_type: aws_sigv4
+    aws_region_name: os.environ/AWS_REGION
+    aws_service_name: bedrock-agentcore
+    aws_role_name: os.environ/AGENTCORE_DOCUMENT_RENDERER_ROLE_ARN
+    aws_session_name: litellm-document-renderer
+    description: Render approved Markdown into branded PDF documents.
+    allowed_tools:
+      - validate_document
+      - list_supported_formats
+      - render_data_reply_pdf
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
