@@ -14,7 +14,13 @@ db_primary_instance_identifier = "data-reply-litellm-prod-reader"
 db_writer_instance_class       = "db.serverless"
 db_serverless_min_capacity     = 0.5
 db_serverless_max_capacity     = 8
-db_engine_version = "16.11"
+db_engine_version              = "16.11"
+
+# ---------- Lambda Function URL document renderer ----------
+document_renderer_enabled      = false
+document_renderer_function_url = ""
+document_renderer_role_arn     = ""
+document_renderer_region       = "eu-central-1"
 
 # ---------- proxy_config (mirrors helm gateway.config.proxy_config) ----------
 proxy_config = {
