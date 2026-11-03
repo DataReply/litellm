@@ -37,3 +37,16 @@ resource "aws_ecr_repository" "migrations" {
 
   tags = local.tags
 }
+
+resource "aws_ecr_repository" "document_renderer" {
+  count = var.document_renderer_enabled ? 1 : 0
+
+  name                 = "${local.name}-document-renderer"
+  image_tag_mutability = "IMMUTABLE"
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+
+  tags = local.tags
+}

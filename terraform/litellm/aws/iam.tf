@@ -110,12 +110,68 @@ resource "aws_iam_role_policy_attachment" "task_rds_iam_connect" {
   policy_arn = aws_iam_policy.rds_iam_connect.arn
 }
 
+data "aws_iam_policy_document" "document_renderer_invoker_assume" {
+  count = var.document_renderer_enabled ? 1 : 0
+
+  statement {
+    actions = ["sts:AssumeRole"]
+
+    principals {
+      type        = "AWS"
+      identifiers = [aws_iam_role.task.arn]
+    }
+  }
+}
+
+resource "aws_iam_role" "document_renderer_invoker" {
+  count = var.document_renderer_enabled ? 1 : 0
+
+  name               = "${local.name}-document-renderer-invoker"
+  assume_role_policy = data.aws_iam_policy_document.document_renderer_invoker_assume[0].json
+
+  tags = local.tags
+}
+
+data "aws_iam_policy_document" "document_renderer_invoke" {
+  count = var.document_renderer_enabled ? 1 : 0
+
+  statement {
+    actions   = ["lambda:InvokeFunction"]
+    resources = [aws_lambda_function.document_renderer[0].arn]
+
+    condition {
+      test     = "Bool"
+      variable = "lambda:InvokedViaFunctionUrl"
+      values   = ["true"]
+    }
+  }
+
+  statement {
+    actions   = ["lambda:InvokeFunctionUrl"]
+    resources = [aws_lambda_function.document_renderer[0].arn]
+
+    condition {
+      test     = "StringEquals"
+      variable = "lambda:FunctionUrlAuthType"
+      values   = ["AWS_IAM"]
+    }
+  }
+}
+
+resource "aws_iam_role_policy" "document_renderer_invoke" {
+  count = var.document_renderer_enabled ? 1 : 0
+
+  name   = "${local.name}-document-renderer-invoke"
+  role   = aws_iam_role.document_renderer_invoker[0].name
+  policy = data.aws_iam_policy_document.document_renderer_invoke[0].json
+}
+
 data "aws_iam_policy_document" "task_document_renderer_assume" {
   count = var.document_renderer_enabled ? 1 : 0
 
   statement {
     actions   = ["sts:AssumeRole"]
-    resources = [var.document_renderer_role_arn]
+    resources = [aws_iam_role.document_renderer_invoker[0].arn]
   }
 }
 
@@ -125,6 +181,89 @@ resource "aws_iam_role_policy" "task_document_renderer_assume" {
   name   = "${local.name}-task-document-renderer-assume"
   role   = aws_iam_role.task.name
   policy = data.aws_iam_policy_document.task_document_renderer_assume[0].json
+}
+
+data "aws_iam_policy_document" "document_renderer_execution_assume" {
+  count = var.document_renderer_enabled ? 1 : 0
+
+  statement {
+    actions = ["sts:AssumeRole"]
+
+    principals {
+      type        = "Service"
+      identifiers = ["lambda.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role" "document_renderer_execution" {
+  count = var.document_renderer_enabled ? 1 : 0
+
+  name               = "${local.name}-document-renderer-execution"
+  assume_role_policy = data.aws_iam_policy_document.document_renderer_execution_assume[0].json
+
+  tags = local.tags
+}
+
+resource "aws_iam_role_policy_attachment" "document_renderer_execution_basic" {
+  count = var.document_renderer_enabled ? 1 : 0
+
+  role       = aws_iam_role.document_renderer_execution[0].name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+data "aws_iam_policy_document" "document_renderer_artifacts" {
+  count = var.document_renderer_enabled ? 1 : 0
+
+  statement {
+    actions   = ["s3:PutObject"]
+    resources = ["${aws_s3_bucket.this.arn}/document-renderer/*"]
+  }
+}
+
+resource "aws_iam_role_policy" "document_renderer_artifacts" {
+  count = var.document_renderer_enabled ? 1 : 0
+
+  name   = "${local.name}-document-renderer-artifacts"
+  role   = aws_iam_role.document_renderer_execution[0].name
+  policy = data.aws_iam_policy_document.document_renderer_artifacts[0].json
+}
+
+data "aws_iam_policy_document" "github_oidc_document_renderer_deploy" {
+  count = var.document_renderer_enabled ? 1 : 0
+
+  statement {
+    actions = [
+      "ecr:BatchCheckLayerAvailability",
+      "ecr:CompleteLayerUpload",
+      "ecr:InitiateLayerUpload",
+      "ecr:PutImage",
+      "ecr:UploadLayerPart",
+    ]
+    resources = [aws_ecr_repository.document_renderer[0].arn]
+  }
+
+  statement {
+    actions   = ["ecr:GetAuthorizationToken"]
+    resources = ["*"]
+  }
+
+  statement {
+    actions = [
+      "lambda:GetFunction",
+      "lambda:UpdateFunctionCode",
+      "lambda:PublishVersion",
+    ]
+    resources = ["arn:${data.aws_partition.current.partition}:lambda:${var.region}:${data.aws_caller_identity.current.account_id}:function:${local.name}-document-renderer"]
+  }
+}
+
+resource "aws_iam_role_policy" "github_oidc_document_renderer_deploy" {
+  count = var.document_renderer_enabled ? 1 : 0
+
+  name   = "${local.name}-document-renderer-deploy"
+  role   = "github-oidc-provider-role"
+  policy = data.aws_iam_policy_document.github_oidc_document_renderer_deploy[0].json
 }
 
 # ---------- UI task role ----------

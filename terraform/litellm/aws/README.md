@@ -106,16 +106,14 @@ backend_extra_env = {
 
 ### Lambda Function URL document renderer
 
-Set `document_renderer_enabled` to add the branded-document renderer MCP server to the generated gateway configuration. The module passes the Lambda Function URL, invocation role ARN, and region to the gateway task, then grants that task `sts:AssumeRole` for the supplied role ARN.
+Set `document_renderer_enabled` to create the ARM64 renderer Lambda, its IAM-authenticated Function URL, a private ECR repository, a dedicated artifact lifecycle policy, and least-privilege invocation and execution roles. The generated LiteLLM configuration assumes the invocation role and signs MCP requests with the `lambda` service name.
 
 ```hcl
-document_renderer_enabled      = true
-document_renderer_function_url = "https://...lambda-url.eu-west-1.on.aws/mcp"
-document_renderer_role_arn     = "arn:aws:iam::123456789012:role/..."
-document_renderer_region       = "eu-west-1"
+document_renderer_enabled   = true
+document_renderer_image_tag = "bootstrap"
 ```
 
-The assumed role must allow `lambda:InvokeFunctionUrl` and `lambda:InvokeFunction` only on the target renderer. Its trust policy must allow this module's ECS task role, and the Lambda Function URL resource policy must allow the assumed role. This module does not create or broaden either policy because they belong to the project that owns the renderer. The proxy task has no static AWS credentials.
+The branding repository deploys image updates through the existing `github-oidc-provider-role`. Its GitHub Actions workflow must push to `document_renderer_ecr_repository_url` and update the Lambda using an image digest. Terraform intentionally ignores later image URI changes so it does not roll back a branding-repository deployment. Create the ECR repository with the targeted Terraform resource, dispatch the branding workflow once with `image_tag=bootstrap`, then run the normal Terraform apply after that image exists.
 
 The integration configures `validate_document`, `list_supported_formats`, and `render_data_reply_pdf`. Do not define another `branded_document_renderer` entry in `proxy_config.mcp_servers`; the module owns that key while this integration is enabled.
 

@@ -482,41 +482,52 @@ variable "backend_extra_secrets" {
 }
 
 variable "document_renderer_enabled" {
-  description = "Enable the Lambda Function URL document-renderer MCP integration for the gateway task."
+  description = "Create the Lambda Function URL document renderer and configure it as an MCP server for the gateway task."
   type        = bool
   default     = false
 }
 
-variable "document_renderer_function_url" {
-  description = "HTTPS Lambda Function URL ending in /mcp. Required when document_renderer_enabled is true."
+variable "document_renderer_image_tag" {
+  description = "Immutable ECR image tag for the document renderer. Push this image to the document-renderer repository before applying with document_renderer_enabled set to true."
   type        = string
   default     = ""
 
   validation {
-    condition     = var.document_renderer_function_url == "" || can(regex("^https://[^/]+\\.lambda-url\\.[a-z0-9-]+\\.on\\.aws/mcp$", var.document_renderer_function_url))
-    error_message = "document_renderer_function_url must be an HTTPS Lambda Function URL ending in /mcp."
+    condition     = var.document_renderer_image_tag == "" || can(regex("^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$", var.document_renderer_image_tag))
+    error_message = "document_renderer_image_tag must be a valid ECR image tag."
   }
 }
 
-variable "document_renderer_role_arn" {
-  description = "IAM role ARN that the gateway task assumes to invoke the document-renderer Lambda Function URL. Required when document_renderer_enabled is true."
-  type        = string
-  default     = ""
+variable "document_renderer_artifact_retention_days" {
+  description = "Number of days to retain generated document-renderer PDFs in S3."
+  type        = number
+  default     = 1
 
   validation {
-    condition     = var.document_renderer_role_arn == "" || can(regex("^arn:[^:]+:iam::[0-9]{12}:role/.+$", var.document_renderer_role_arn))
-    error_message = "document_renderer_role_arn must be an IAM role ARN."
+    condition     = var.document_renderer_artifact_retention_days >= 1
+    error_message = "document_renderer_artifact_retention_days must be at least 1."
   }
 }
 
-variable "document_renderer_region" {
-  description = "AWS Region of the document-renderer Lambda Function URL. Empty uses region."
-  type        = string
-  default     = ""
+variable "document_renderer_memory_size" {
+  description = "Memory in MiB for the document-renderer Lambda."
+  type        = number
+  default     = 1024
 
   validation {
-    condition     = var.document_renderer_region == "" || can(regex("^[a-z]{2}(?:-gov)?-[a-z]+-[0-9]+$", var.document_renderer_region))
-    error_message = "document_renderer_region must be a valid AWS Region identifier."
+    condition     = contains([128, 256, 512, 1024, 1536, 2048, 3072, 4096, 5120, 6144, 7168, 8192, 9216, 10240], var.document_renderer_memory_size)
+    error_message = "document_renderer_memory_size must be a valid Lambda memory value."
+  }
+}
+
+variable "document_renderer_timeout_seconds" {
+  description = "Timeout in seconds for the document-renderer Lambda."
+  type        = number
+  default     = 120
+
+  validation {
+    condition     = var.document_renderer_timeout_seconds >= 1 && var.document_renderer_timeout_seconds <= 900
+    error_message = "document_renderer_timeout_seconds must be between 1 and 900."
   }
 }
 

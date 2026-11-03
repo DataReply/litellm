@@ -48,6 +48,25 @@ resource "aws_s3_bucket_public_access_block" "this" {
   restrict_public_buckets = true
 }
 
+resource "aws_s3_bucket_lifecycle_configuration" "document_renderer" {
+  count = var.document_renderer_enabled ? 1 : 0
+
+  bucket = aws_s3_bucket.this.id
+
+  rule {
+    id     = "document-renderer-artifacts"
+    status = "Enabled"
+
+    filter {
+      prefix = "document-renderer/"
+    }
+
+    expiration {
+      days = var.document_renderer_artifact_retention_days
+    }
+  }
+}
+
 # Task role gains object-level read/write on this bucket. Bucket-level perms
 # (list/location) are also scoped to this bucket only.
 data "aws_iam_policy_document" "s3_access" {

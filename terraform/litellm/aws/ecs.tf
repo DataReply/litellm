@@ -162,11 +162,10 @@ locals {
     for k, v in var.backend_extra_secrets : { name = k, valueFrom = v }
   ]
 
-  document_renderer_region = var.document_renderer_region != "" ? var.document_renderer_region : var.region
   document_renderer_env = var.document_renderer_enabled ? [
-    { name = "DOCUMENT_RENDERER_MCP_URL", value = var.document_renderer_function_url },
-    { name = "DOCUMENT_RENDERER_ROLE_ARN", value = var.document_renderer_role_arn },
-    { name = "DOCUMENT_RENDERER_REGION", value = local.document_renderer_region },
+    { name = "DOCUMENT_RENDERER_MCP_URL", value = "${aws_lambda_function_url.document_renderer[0].function_url}mcp" },
+    { name = "DOCUMENT_RENDERER_ROLE_ARN", value = aws_iam_role.document_renderer_invoker[0].arn },
+    { name = "DOCUMENT_RENDERER_REGION", value = var.region },
   ] : []
   document_renderer_mcp_servers = var.document_renderer_enabled ? {
     branded_document_renderer = {
@@ -220,8 +219,7 @@ locals {
   proxy_config_path    = "/tmp/litellm-config.yaml"
 
   document_renderer_configuration_valid = !var.document_renderer_enabled || (
-    var.document_renderer_function_url != "" &&
-    var.document_renderer_role_arn != "" &&
+    var.document_renderer_image_tag != "" &&
     !contains(keys(local.proxy_config_mcp_servers), "branded_document_renderer")
   )
 
@@ -287,7 +285,7 @@ resource "aws_ecs_task_definition" "gateway" {
 
     precondition {
       condition     = local.document_renderer_configuration_valid
-      error_message = "document_renderer_function_url and document_renderer_role_arn are required when document_renderer_enabled is true, and proxy_config.mcp_servers must not define branded_document_renderer."
+      error_message = "document_renderer_image_tag is required when document_renderer_enabled is true, and proxy_config.mcp_servers must not define branded_document_renderer."
     }
   }
 

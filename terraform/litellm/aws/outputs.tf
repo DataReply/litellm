@@ -58,6 +58,16 @@ output "migrations_ecr_repository_url" {
   value       = aws_ecr_repository.migrations.repository_url
 }
 
+output "document_renderer_ecr_repository_url" {
+  description = "ECR repository URL for the document-renderer image."
+  value       = var.document_renderer_enabled ? aws_ecr_repository.document_renderer[0].repository_url : null
+}
+
+output "document_renderer_function_url" {
+  description = "IAM-authenticated Lambda Function URL for the document-renderer MCP endpoint."
+  value       = var.document_renderer_enabled ? "${aws_lambda_function_url.document_renderer[0].function_url}mcp" : null
+}
+
 output "master_key_secret_arn" {
   description = "Secrets Manager ARN holding LITELLM_MASTER_KEY. Fetch with `aws secretsmanager get-secret-value --secret-id <arn>`."
   value       = aws_secretsmanager_secret.master_key.arn

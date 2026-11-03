@@ -34,16 +34,17 @@ module "litellm" {
   s3_force_destroy            = var.s3_force_destroy
   skip_final_snapshot         = var.skip_final_snapshot
 
-  proxy_config                   = var.proxy_config
-  bedrock_models                 = var.bedrock_models
-  document_renderer_enabled      = var.document_renderer_enabled
-  document_renderer_function_url = var.document_renderer_function_url
-  document_renderer_role_arn     = var.document_renderer_role_arn
-  document_renderer_region       = var.document_renderer_region
-  gateway_extra_env              = var.gateway_extra_env
-  backend_extra_env              = var.backend_extra_env
-  gateway_extra_secrets          = var.gateway_extra_secrets
-  backend_extra_secrets          = var.backend_extra_secrets
+  proxy_config                              = var.proxy_config
+  bedrock_models                            = var.bedrock_models
+  document_renderer_enabled                 = var.document_renderer_enabled
+  document_renderer_image_tag               = var.document_renderer_image_tag
+  document_renderer_artifact_retention_days = var.document_renderer_artifact_retention_days
+  document_renderer_memory_size             = var.document_renderer_memory_size
+  document_renderer_timeout_seconds         = var.document_renderer_timeout_seconds
+  gateway_extra_env                         = var.gateway_extra_env
+  backend_extra_env                         = var.backend_extra_env
+  gateway_extra_secrets                     = var.gateway_extra_secrets
+  backend_extra_secrets                     = var.backend_extra_secrets
 
   db_enable_reader               = var.db_enable_reader
   db_primary_instance_identifier = var.db_primary_instance_identifier

@@ -16,11 +16,11 @@ db_serverless_min_capacity     = 0.5
 db_serverless_max_capacity     = 8
 db_engine_version              = "16.11"
 
-# ---------- Lambda Function URL document renderer ----------
-document_renderer_enabled      = false
-document_renderer_function_url = ""
-document_renderer_role_arn     = ""
-document_renderer_region       = "eu-central-1"
+document_renderer_enabled                 = true
+document_renderer_image_tag               = "bootstrap"
+document_renderer_artifact_retention_days = 1
+document_renderer_memory_size             = 1024
+document_renderer_timeout_seconds         = 120
 
 # ---------- proxy_config (mirrors helm gateway.config.proxy_config) ----------
 proxy_config = {
