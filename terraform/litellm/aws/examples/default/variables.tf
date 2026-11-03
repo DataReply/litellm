@@ -137,6 +137,36 @@ variable "bedrock_models" {
   default = []
 }
 
+variable "document_renderer_enabled" {
+  description = "Create the Lambda Function URL document renderer and configure it as an MCP server."
+  type        = bool
+  default     = false
+}
+
+variable "document_renderer_image_tag" {
+  description = "ECR image tag that Terraform uses to create the renderer Lambda."
+  type        = string
+  default     = ""
+}
+
+variable "document_renderer_artifact_retention_days" {
+  description = "Days to retain generated renderer PDFs."
+  type        = number
+  default     = 1
+}
+
+variable "document_renderer_memory_size" {
+  description = "Renderer Lambda memory in MiB."
+  type        = number
+  default     = 1024
+}
+
+variable "document_renderer_timeout_seconds" {
+  description = "Renderer Lambda timeout in seconds."
+  type        = number
+  default     = 120
+}
+
 variable "gateway_extra_env" {
   description = "Plain-text env vars layered onto the gateway."
   type        = map(string)

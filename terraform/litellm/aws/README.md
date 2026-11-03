@@ -104,6 +104,19 @@ backend_extra_env = {
 }
 ```
 
+### Lambda Function URL document renderer
+
+Set `document_renderer_enabled` to create the ARM64 renderer Lambda, its IAM-authenticated Function URL, a private ECR repository, a dedicated artifact lifecycle policy, and least-privilege invocation and execution roles. The generated LiteLLM configuration assumes the invocation role and signs MCP requests with the `lambda` service name.
+
+```hcl
+document_renderer_enabled   = true
+document_renderer_image_tag = "bootstrap"
+```
+
+The branding repository deploys image updates through the existing `github-oidc-provider-role`. Its GitHub Actions workflow must push to `document_renderer_ecr_repository_url` and update the Lambda using an image digest. Terraform intentionally ignores later image URI changes so it does not roll back a branding-repository deployment. Create the ECR repository with the targeted Terraform resource, dispatch the branding workflow once with `image_tag=bootstrap`, then run the normal Terraform apply after that image exists.
+
+The integration configures `validate_document`, `list_supported_formats`, and `render_data_reply_pdf`. Do not define another `branded_document_renderer` entry in `proxy_config.mcp_servers`; the module owns that key while this integration is enabled.
+
 ### Extra secrets (API keys)
 
 Sensitive values — provider API keys, third-party tokens — live in **existing

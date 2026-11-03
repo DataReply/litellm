@@ -481,6 +481,56 @@ variable "backend_extra_secrets" {
   default     = {}
 }
 
+variable "document_renderer_enabled" {
+  description = "Create the Lambda Function URL document renderer and configure it as an MCP server for the gateway task."
+  type        = bool
+  default     = false
+}
+
+variable "document_renderer_image_tag" {
+  description = "Immutable ECR image tag for the document renderer. Push this image to the document-renderer repository before applying with document_renderer_enabled set to true."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.document_renderer_image_tag == "" || can(regex("^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$", var.document_renderer_image_tag))
+    error_message = "document_renderer_image_tag must be a valid ECR image tag."
+  }
+}
+
+variable "document_renderer_artifact_retention_days" {
+  description = "Number of days to retain generated document-renderer PDFs in S3."
+  type        = number
+  default     = 1
+
+  validation {
+    condition     = var.document_renderer_artifact_retention_days >= 1
+    error_message = "document_renderer_artifact_retention_days must be at least 1."
+  }
+}
+
+variable "document_renderer_memory_size" {
+  description = "Memory in MiB for the document-renderer Lambda."
+  type        = number
+  default     = 1024
+
+  validation {
+    condition     = contains([128, 256, 512, 1024, 1536, 2048, 3072, 4096, 5120, 6144, 7168, 8192, 9216, 10240], var.document_renderer_memory_size)
+    error_message = "document_renderer_memory_size must be a valid Lambda memory value."
+  }
+}
+
+variable "document_renderer_timeout_seconds" {
+  description = "Timeout in seconds for the document-renderer Lambda."
+  type        = number
+  default     = 120
+
+  validation {
+    condition     = var.document_renderer_timeout_seconds >= 1 && var.document_renderer_timeout_seconds <= 900
+    error_message = "document_renderer_timeout_seconds must be between 1 and 900."
+  }
+}
+
 variable "proxy_config" {
   description = <<-EOT
     LiteLLM proxy config (the contents of config.yaml). Mirrors the helm

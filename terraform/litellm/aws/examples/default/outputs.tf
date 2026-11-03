@@ -13,6 +13,11 @@ output "ecs_cluster" {
   value       = module.litellm.ecs_cluster
 }
 
+output "gateway_task_role_arn" {
+  description = "IAM role ARN used by the LiteLLM gateway task."
+  value       = module.litellm.gateway_task_role_arn
+}
+
 output "aurora_writer_endpoint" {
   description = "Aurora writer endpoint."
   value       = module.litellm.aurora_writer_endpoint

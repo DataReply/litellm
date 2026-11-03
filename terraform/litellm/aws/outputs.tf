@@ -13,6 +13,11 @@ output "ecs_cluster" {
   value       = aws_ecs_cluster.this.name
 }
 
+output "gateway_task_role_arn" {
+  description = "IAM role ARN used by the LiteLLM gateway task. Add this principal to the document-renderer invocation role trust policy when Function URL integration is enabled."
+  value       = aws_iam_role.task.arn
+}
+
 output "aurora_writer_endpoint" {
   description = "Aurora writer endpoint (cluster endpoint). Used by gateway/backend as DATABASE_HOST."
   value       = aws_rds_cluster.this.endpoint
@@ -51,6 +56,16 @@ output "ui_ecr_repository_url" {
 output "migrations_ecr_repository_url" {
   description = "ECR repository URL for the migrations image."
   value       = aws_ecr_repository.migrations.repository_url
+}
+
+output "document_renderer_ecr_repository_url" {
+  description = "ECR repository URL for the document-renderer image."
+  value       = var.document_renderer_enabled ? aws_ecr_repository.document_renderer[0].repository_url : null
+}
+
+output "document_renderer_function_url" {
+  description = "IAM-authenticated Lambda Function URL for the document-renderer MCP endpoint."
+  value       = var.document_renderer_enabled ? "${aws_lambda_function_url.document_renderer[0].function_url}mcp" : null
 }
 
 output "master_key_secret_arn" {
