@@ -373,7 +373,7 @@ from litellm.proxy.auth.auth_checks import (
 )
 from litellm.proxy.auth.auth_object_prefetch import AUTH_OBJECTS_TARGET
 from litellm.proxy.auth.auth_utils import (
-    _has_user_setup_sso,
+    has_user_setup_sso,
     check_response_size_is_safe,
     is_request_body_safe,
     log_model_access_denial,
@@ -11403,7 +11403,7 @@ class ProxyStartupEvent:
         user_credentials_enabled: Optional[bool] = str_to_bool(LITELLM_USER_CREDENTIALS_ROTATION_ENABLED)
         verbose_proxy_logger.debug(f"user_credentials_enabled: {user_credentials_enabled}")
 
-        if user_credentials_enabled is True and not _has_user_setup_sso():
+        if user_credentials_enabled is True and not has_user_setup_sso():
             try:
                 from litellm.proxy.common_utils.user_credentials_rotation_manager import (
                     UserCredentialsRotationManager,

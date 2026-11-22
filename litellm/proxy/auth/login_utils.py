@@ -210,7 +210,7 @@ class LoginResult:
         self.password_reset_required = password_reset_required
 
 
-def _get_password_expiry(user_row: LiteLLM_UserTable) -> Optional[datetime]:
+def _get_password_expiry(user_row: LiteLLM_UserTable) -> datetime | None:
     password_expiry = getattr(user_row, "password_expiry", None)
     if isinstance(password_expiry, datetime):
         return password_expiry if password_expiry.tzinfo is not None else password_expiry.replace(tzinfo=timezone.utc)

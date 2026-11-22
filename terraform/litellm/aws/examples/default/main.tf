@@ -40,9 +40,9 @@ module "litellm" {
 
   acm_certificate_domain_name = var.acm_certificate_domain_name
   route53_zone_id             = var.route53_zone_id
-  allow_plaintext_alb = var.allow_plaintext_alb
-  s3_force_destroy    = var.s3_force_destroy
-  skip_final_snapshot = var.skip_final_snapshot
+  allow_plaintext_alb         = var.allow_plaintext_alb
+  s3_force_destroy            = var.s3_force_destroy
+  skip_final_snapshot         = var.skip_final_snapshot
 
   proxy_config          = var.proxy_config
   bedrock_models        = var.bedrock_models

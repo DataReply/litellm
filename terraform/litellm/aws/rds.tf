@@ -105,7 +105,7 @@ resource "aws_rds_cluster_instance" "writer" {
 }
 
 resource "aws_rds_cluster_instance" "reader" {
-  count              = var.db_enable_reader ? 1 : 0
+  count              = var.create_database && var.db_enable_reader ? 1 : 0
   identifier         = local.db_reader_instance_identifier
   cluster_identifier = aws_rds_cluster.this[0].id
   instance_class     = local.db_reader_instance_class

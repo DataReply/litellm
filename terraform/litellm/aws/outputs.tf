@@ -30,7 +30,7 @@ output "aurora_writer_endpoint" {
 
 output "aurora_reader_endpoint" {
   description = "Aurora reader endpoint when a reader exists. Used by gateway/backend as DATABASE_HOST_READ_REPLICA."
-  value       = var.db_enable_reader ? aws_rds_cluster.this.reader_endpoint : null
+  value       = var.create_database && var.db_enable_reader ? aws_rds_cluster.this[0].reader_endpoint : null
 }
 
 output "redis_endpoint" {

@@ -23,6 +23,14 @@ variables {
 run "module_owns_everything_by_default" {
   command = plan
 
+  override_resource {
+    target          = aws_rds_cluster.this
+    override_during = plan
+    values = {
+      reader_endpoint = "reader.test"
+    }
+  }
+
   variables {
     azs = ["us-east-1a", "us-east-1b"]
   }
@@ -38,6 +46,11 @@ run "module_owns_everything_by_default" {
   }
 
   assert {
+    condition     = length(aws_rds_cluster_instance.reader) == 1 && output.aurora_reader_endpoint == aws_rds_cluster.this[0].reader_endpoint
+    error_message = "An enabled managed reader must be created and expose its cluster's reader endpoint."
+  }
+
+  assert {
     condition     = length(aws_secretsmanager_secret.database_url) == 0 && length(aws_secretsmanager_secret.redis_url) == 0
     error_message = "Connection-string secrets belong to the bring-your-own path only."
   }
@@ -50,6 +63,20 @@ run "module_owns_everything_by_default" {
   assert {
     condition     = length(terraform_data.bootstrap_db) == 1 && length(aws_ecs_task_definition.migrations) == 1
     error_message = "The IAM-user bootstrap and the schema migration must both run against the module-created Aurora."
+  }
+}
+
+run "disabled_reader_has_no_instance_or_endpoint" {
+  command = plan
+
+  variables {
+    azs              = ["us-east-1a", "us-east-1b"]
+    db_enable_reader = false
+  }
+
+  assert {
+    condition     = length(aws_rds_cluster_instance.reader) == 0 && output.aurora_reader_endpoint == null
+    error_message = "Disabling the reader must suppress its instance and endpoint output."
   }
 }
 
@@ -112,6 +139,7 @@ run "existing_database_and_redis_replace_the_managed_ones" {
     condition = alltrue([
       length(aws_rds_cluster.this) == 0,
       length(aws_rds_cluster_instance.writer) == 0,
+      length(aws_rds_cluster_instance.reader) == 0,
       length(aws_db_subnet_group.this) == 0,
       length(aws_security_group.rds) == 0,
       length(aws_elasticache_replication_group.this) == 0,
@@ -119,6 +147,11 @@ run "existing_database_and_redis_replace_the_managed_ones" {
       length(aws_security_group.redis) == 0,
     ])
     error_message = "Pointing at an existing database and cache must create neither Aurora nor ElastiCache."
+  }
+
+  assert {
+    condition     = output.aurora_reader_endpoint == null
+    error_message = "An external database must not expose a managed Aurora reader endpoint."
   }
 
   assert {
@@ -266,7 +299,10 @@ run "no_database_and_no_redis_drops_the_schema_migration" {
   }
 
   assert {
-    condition     = length(local.shared_env) == 4
-    error_message = "The shared env must narrow to the S3 bucket and region pair when both data stores are gone."
+    condition = alltrue([
+      for env in local.shared_env :
+      !startswith(env.name, "DATABASE_") && !startswith(env.name, "REDIS_") && env.name != "IAM_TOKEN_DB_AUTH"
+    ])
+    error_message = "The shared env must omit database and Redis connection settings when both data stores are disabled."
   }
 }
