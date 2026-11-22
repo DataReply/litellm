@@ -9,6 +9,7 @@
 # Protected branches (always allowed):
 #   - main
 #   - litellm_internal_staging
+#   - datareply/prod
 #   - dependabot/*
 #   - gh-readonly-queue/*
 #
@@ -78,8 +79,7 @@ if [ -n "$invalid" ]; then
     chore/bump-deps
     hotfix/auth-bypass
 
-  Protected (always allowed): main, litellm_internal_staging,
-  dependabot/*, gh-readonly-queue/*.
+  Protected (always allowed): main, litellm_internal_staging, datareply/prod dependabot/*, gh-readonly-queue/*.
 
 See https://conventional-branch.github.io/
 
