@@ -69,9 +69,23 @@ proxy_config = {
       }
     },
     {
-      model_name = "gpt-6-sol"
+      model_name = "gpt-6.1-sol"
       litellm_params = {
         model   = "openai/gpt-6.1-sol"
+        api_key = "os.environ/OPENAI_API_KEY"
+      }
+    },
+    {
+      model_name = "gpt-6.1-terra"
+      litellm_params = {
+        model   = "openai/gpt-6.1-terra"
+        api_key = "os.environ/OPENAI_API_KEY"
+      }
+    },
+    {
+      model_name = "gpt-6.2-sol"
+      litellm_params = {
+        model   = "openai/gpt-6.2-sol"
         api_key = "os.environ/OPENAI_API_KEY"
       }
     },
@@ -238,7 +252,7 @@ proxy_config = {
         guardrail            = "headroom"
         mode                 = "pre_call"
         api_base             = "http://127.0.0.1:8787"
-        default_on           = true
+        default_on           = false
         unreachable_fallback = "fail_open"
       }
     }
