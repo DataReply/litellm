@@ -213,6 +213,7 @@ proxy_config = {
     master_key                        = "os.environ/LITELLM_MASTER_KEY"
     database_url                      = "os.environ/DATABASE_URL"
     enforce_email_prefix_on_key_alias = true
+    disable_env_credential_login      = true
     # key_management_system             = "aws_secret_manager"
     # key_management_settings = {
     #   hosted_keys = [
@@ -252,7 +253,7 @@ proxy_config = {
         guardrail            = "headroom"
         mode                 = "pre_call"
         api_base             = "http://127.0.0.1:8787"
-        default_on           = false
+        default_on           = true
         unreachable_fallback = "fail_open"
       }
     }
